@@ -22,8 +22,85 @@ if (!SPREADSHEET_ID || !SA_JSON) {
   process.exit(1);
 }
 
+/** 文字列リテラル「外」にある整形用の \n \t \r エスケープ（2文字の \+n 等）を除去 */
+function stripStructuralEscapes(s) {
+  let out = '';
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (esc) {
+      out += ch;
+      esc = false;
+      continue;
+    }
+    if (ch === '\\') {
+      if (inStr) {
+        out += ch;
+        esc = true;
+        continue;
+      }
+      const next = s[i + 1];
+      if (next === 'n' || next === 't' || next === 'r') {
+        i++; // 整形用エスケープを破棄
+        continue;
+      }
+      out += ch;
+      continue;
+    }
+    if (ch === '"') inStr = !inStr;
+    out += ch;
+  }
+  return out;
+}
+
+/** 文字列リテラル「内」の実制御文字を JSON エスケープへ変換 */
+function escapeControlInStrings(s) {
+  let out = '';
+  let inStr = false;
+  let esc = false;
+  for (const ch of s) {
+    if (esc) {
+      out += ch;
+      esc = false;
+      continue;
+    }
+    if (ch === '\\') {
+      out += ch;
+      esc = true;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = !inStr;
+      out += ch;
+      continue;
+    }
+    if (inStr && (ch === '\n' || ch === '\r' || ch === '\t')) {
+      out += ch === '\n' ? '\\n' : ch === '\r' ? '\\r' : '\\t';
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * サービスアカウント JSON をパース。.env の格納形式の差異（整形JSONの改行が \n として
+ * エスケープ済み / 実改行で展開済み 等）を吸収する。失敗しても秘密鍵は出力しない。
+ */
+function parseServiceAccount(raw) {
+  for (const fn of [(x) => x, stripStructuralEscapes, escapeControlInStrings]) {
+    try {
+      return JSON.parse(fn(raw));
+    } catch {
+      /* 次の戦略へ */
+    }
+  }
+  throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON のパースに失敗しました（.env の形式を確認してください）');
+}
+
 const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(SA_JSON),
+  credentials: parseServiceAccount(SA_JSON),
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
 });
 const sheets = google.sheets({ version: 'v4', auth });
