@@ -19,26 +19,43 @@ if (!BOT_TOKEN || !APP_ID) {
   process.exit(1);
 }
 
+// Discord option type: 4 = INTEGER, 6 = USER
 const commands = [
-  { name: 'recruit', description: '次回イベントの募集メッセージを手動で送信します (管理者用)', default_member_permissions: '8' },
+  {
+    name: 'recruit',
+    description: '指定した通知の募集メッセージを手動で送信します (管理者用)',
+    default_member_permissions: '8',
+    options: [{ name: 'notification_id', description: '対象の通知ID', type: 4, required: true }],
+  },
+  {
+    name: 'assign',
+    description: '指定した通知の最新開催回に番号を割り当てます (管理者用)',
+    default_member_permissions: '8',
+    options: [{ name: 'notification_id', description: '対象の通知ID', type: 4, required: true }],
+  },
   {
     name: 'pause',
-    description: 'メンバーを「休止中」に設定します (管理者用)',
+    description: 'メンバーを区分ごとに「休止中」に設定します (管理者用)',
     default_member_permissions: '8',
-    options: [{ name: 'user', description: '休止中にするメンバー', type: 6, required: true }],
+    options: [
+      { name: 'user', description: '休止中にするメンバー', type: 6, required: true },
+      { name: 'segment_id', description: '対象の区分ID（未指定で所属が1つなら自動選択）', type: 4, required: false },
+    ],
   },
   {
     name: 'resume',
-    description: 'メンバーの「休止中」を解除します (管理者用)',
+    description: 'メンバーの区分ごとの「休止中」を解除します (管理者用)',
     default_member_permissions: '8',
-    options: [{ name: 'user', description: '休止中を解除するメンバー', type: 6, required: true }],
+    options: [
+      { name: 'user', description: '休止中を解除するメンバー', type: 6, required: true },
+      { name: 'segment_id', description: '対象の区分ID（未指定で所属が1つなら自動選択）', type: 4, required: false },
+    ],
   },
-  { name: 'members', description: 'メンバー一覧とステータスを表示します (管理者用)', default_member_permissions: '8' },
   {
-    name: 'addmember',
-    description: '新メンバーを追加します (管理者用)',
+    name: 'members',
+    description: 'メンバー一覧を表示します (管理者用)',
     default_member_permissions: '8',
-    options: [{ name: 'user', description: '追加するメンバー', type: 6, required: true }],
+    options: [{ name: 'segment_id', description: '対象の区分ID（未指定で全メンバー）', type: 4, required: false }],
   },
 ];
 

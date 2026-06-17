@@ -1,4 +1,12 @@
 /**
+ * ⚠️ 【現行モデル未対応・要書き直し】
+ *   このスクリプトは旧スキーマ（config / members / event_log の単一定例モデル）向けに
+ *   seed SQL を生成する。汎用リデザイン後の現行スキーマ
+ *   （events / segments / members / segment_members / notifications / occurrences / responses / assignments）
+ *   とは構造が異なるため、生成される seed.sql は**そのままでは適用できない**。
+ *   Sheets 読み取り部分は流用できるが、現行モデルへ投入するには書き直しが必要。
+ *   （本番移行はずっと先の予定。それまで本スクリプトは参照用に凍結。）
+ *
  * 一度きりの移行スクリプト: Google Sheets → D1 seed SQL を生成する。
  *
  * 使い方:

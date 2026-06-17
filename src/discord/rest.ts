@@ -1,5 +1,5 @@
 import type { Env } from '../env';
-import type { Member, EventStatusBuckets } from '../db/types';
+import type { Member, EventStatusBuckets, Segment } from '../db/types';
 import { setDmChannelId } from '../db/members';
 
 const API = 'https://discord.com/api/v10';
@@ -11,19 +11,30 @@ export function mentionUser(userId: string): string {
   return `<@${userId}>`;
 }
 
-/** 出欠回答ボタン（参加/不参加/未定/状況確認） */
-export function createButtonComponents(eventDate: string): unknown[] {
+/** 出欠回答ボタン（参加/不参加/未定/状況確認）。custom_id は {action}_{occurrenceId} */
+export function createButtonComponents(occurrenceId: number): unknown[] {
   return [
     {
       type: 1, // Action Row
       components: [
-        { type: 2, style: 3, label: '参加', custom_id: `participate_${eventDate}` },
-        { type: 2, style: 4, label: '不参加', custom_id: `absent_${eventDate}` },
-        { type: 2, style: 2, label: '未定', custom_id: `undecided_${eventDate}` },
-        { type: 2, style: 2, label: '📊 状況確認', custom_id: `status_${eventDate}` },
+        { type: 2, style: 3, label: '参加', custom_id: `participate_${occurrenceId}` },
+        { type: 2, style: 4, label: '不参加', custom_id: `absent_${occurrenceId}` },
+        { type: 2, style: 2, label: '未定', custom_id: `undecided_${occurrenceId}` },
+        { type: 2, style: 2, label: '📊 状況確認', custom_id: `status_${occurrenceId}` },
       ],
     },
   ];
+}
+
+/**
+ * 募集メッセージの @メンション接頭辞を組み立てる。
+ * enabled かつ Segment に mention_role_id があれば、その指定でメンションを付ける。
+ * '@everyone' はそのまま、それ以外はロールメンション `<@&id>` として展開する。
+ */
+export function buildMentionPrefix(segment: Segment, enabled: boolean): string {
+  if (!enabled || !segment.mention_role_id) return '';
+  if (segment.mention_role_id === '@everyone') return '@everyone\n\n';
+  return `<@&${segment.mention_role_id}>\n\n`;
 }
 
 /** 状況確認メッセージ（旧 buildStatusMessage） */
@@ -68,12 +79,12 @@ async function postMessage(
   }
 }
 
-/** チャンネルへ送信（旧 sendDiscordMessage）。channelId 省略時は既定チャンネル */
+/** チャンネルへ送信（旧 sendDiscordMessage）。channelId は必須（既定チャンネル廃止） */
 export async function sendChannelMessage(
   env: Env,
+  channelId: string,
   content: string,
   components: unknown[] | null = null,
-  channelId: string = env.DISCORD_CHANNEL_ID,
 ): Promise<boolean> {
   return postMessage(env, channelId, content, components);
 }

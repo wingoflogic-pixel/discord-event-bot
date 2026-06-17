@@ -1,5 +1,10 @@
 # Cloudflare 移行 設計ドキュメント
 
+> ⚠️ **このドキュメントは旧設計（単一定例モデル）の歴史的記録です。**
+> その後の「汎用リデザイン」で Event ＞ Notification → Segment ＞ Occurrence の 4 軸モデルへ作り替えており、
+> 現行の用語・スキーマ・設計は [`CONTEXT.md`](../CONTEXT.md) / [`docs/adr/`](./adr) / [`docs/IMPLEMENTATION-CONTRACT.md`](./IMPLEMENTATION-CONTRACT.md) を参照してください。
+> 以下の単一チャンネル・単一定例・Config(KV) 前提の記述は現行コードと一致しません。
+
 ChoiemuEventBot（Discord イベント勤怠管理 Bot）を **Vercel + Google Sheets** から
 **Cloudflare Workers + D1** へ移行し、あわせて **管理用の専用 UI** を追加するための設計。
 

@@ -1,13 +1,52 @@
 import type { Env } from '../env';
-import { getAllConfig, setConfig } from '../db/config';
+import type { NotificationType } from '../db/types';
+import { listEvents, createEvent, updateEvent, deleteEvent } from '../db/events';
+import {
+  listSegments,
+  createSegment,
+  updateSegment,
+  deleteSegment,
+  countNotificationsForSegment,
+  listSegmentMembers,
+  addSegmentMember,
+  setSegmentMemberStatus,
+  removeSegmentMember,
+} from '../db/segments';
 import { getAllMembers, upsertMember, deleteMember } from '../db/members';
-import { listRecentEventLogs } from '../db/eventLog';
+import {
+  listNotifications,
+  getNotification,
+  createNotification,
+  updateNotification,
+  deleteNotification,
+  type NotificationInput,
+} from '../db/notifications';
+import {
+  setOccurrenceStatus,
+  updateOccurrenceDate,
+  listOccurrencesForNotification,
+} from '../db/occurrences';
+import { getResponsesForOccurrence, listRecentResponses } from '../db/responses';
+import { getAssignments, assignNumbers } from '../db/assignments';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+/** クエリの数値（不正・非数値・0以下なら既定値）。不正 limit でD1に NaN を渡し 500 になるのを防ぐ。 */
+function parseLimit(raw: string | null, def: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : def;
+}
+
+/** ボディの数値（''・null・非数値なら既定値）。NaN を .bind に渡して 500 になるのを防ぐ。 */
+function num(v: unknown, def: number): number {
+  if (v === '' || v == null) return def;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
 }
 
 /** 定数時間比較（トークン照合） */
@@ -29,14 +68,52 @@ function authorized(request: Request, env: Env): boolean {
   return !!env.ADMIN_TOKEN && timingSafeEqual(token, env.ADMIN_TOKEN);
 }
 
+/** Notification の入力ボディを正規化（数値フラグは 0/1） */
+function toNotificationInput(b: Record<string, unknown>): NotificationInput | null {
+  const event_id = Number(b.event_id);
+  const segment_id = Number(b.segment_id);
+  const name = typeof b.name === 'string' ? b.name : '';
+  const channel_id = typeof b.channel_id === 'string' ? b.channel_id : '';
+  const type = (b.type === 'oneoff' ? 'oneoff' : 'recurring') as NotificationType;
+  if (!event_id || !segment_id || !name || !channel_id) return null;
+  return {
+    event_id,
+    segment_id,
+    name,
+    channel_id,
+    type,
+    rrule: b.rrule == null || b.rrule === '' ? null : String(b.rrule),
+    one_off_date: b.one_off_date == null || b.one_off_date === '' ? null : String(b.one_off_date),
+    anchor_date: b.anchor_date == null || b.anchor_date === '' ? null : String(b.anchor_date),
+    start_time: typeof b.start_time === 'string' && b.start_time ? b.start_time : '21:00',
+    recruit_days_before: num(b.recruit_days_before, 7),
+    remind_start_days: num(b.remind_start_days, 3),
+    remind_undecided_days: num(b.remind_undecided_days, 1),
+    quota_enabled: b.quota_enabled ? 1 : 0,
+    quota_interval_days:
+      b.quota_interval_days == null ||
+      b.quota_interval_days === '' ||
+      !Number.isFinite(Number(b.quota_interval_days))
+        ? null
+        : Number(b.quota_interval_days),
+    assignment_enabled: b.assignment_enabled ? 1 : 0,
+    mention_enabled: b.mention_enabled ? 1 : 0,
+    active: b.active === undefined ? 1 : b.active ? 1 : 0,
+  };
+}
+
 /**
- * 管理 API（/api/admin/*）。すべて ADMIN_TOKEN による Bearer 認証必須。
- * - GET    /api/admin/config            設定一覧
- * - PUT    /api/admin/config            設定更新 { config: {k:v,...} } または { key, value }
- * - GET    /api/admin/members           メンバー一覧
- * - POST   /api/admin/members           メンバー作成/更新
- * - DELETE /api/admin/members/:userId   メンバー削除
- * - GET    /api/admin/event-log         出欠記録（直近）
+ * 管理 API（/api/admin/*）。すべて ADMIN_TOKEN による Bearer 認証必須。すべて JSON。
+ * - GET/POST   /events,                       PUT/DELETE /events/:id
+ * - GET/POST   /segments,                     PUT/DELETE /segments/:id
+ * - GET        /segments/:id/members,         POST /segments/:id/members ({user_id})
+ * - PUT/DELETE /segments/:id/members/:userId  ({status} for PUT)
+ * - GET/POST   /members,                      DELETE /members/:userId
+ * - GET/POST   /notifications,                GET/PUT/DELETE /notifications/:id
+ * - GET        /notifications/:id/occurrences,PUT /occurrences/:id ({status|date})
+ * - GET        /occurrences/:id/responses,    GET /occurrences/:id/assignments
+ * - POST       /occurrences/:id/assign        (assignNumbers 実行)
+ * - GET        /responses?limit=
  */
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   if (!authorized(request, env)) {
@@ -45,63 +122,205 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api\/admin/, '') || '/';
+  const method = request.method;
   const db = env.DB;
 
   try {
-    // --- config ---
-    if (path === '/config') {
-      if (request.method === 'GET') {
-        return json(await getAllConfig(db));
+    // ============ events ============
+    if (path === '/events') {
+      if (method === 'GET') return json(await listEvents(db));
+      if (method === 'POST') {
+        const b = (await request.json()) as { name?: string };
+        if (!b.name) return json({ error: 'name required' }, 400);
+        return json(await createEvent(db, b.name), 201);
       }
-      if (request.method === 'PUT') {
-        const body = (await request.json()) as
-          | { config?: Record<string, string>; key?: string; value?: string };
-        if (body.config) {
-          for (const [k, v] of Object.entries(body.config)) {
-            await setConfig(db, k, String(v));
-          }
-        } else if (body.key !== undefined && body.value !== undefined) {
-          await setConfig(db, body.key, String(body.value));
-        } else {
-          return json({ error: 'Invalid body' }, 400);
-        }
-        return json({ ok: true });
+    }
+    const eventId = path.match(/^\/events\/(\d+)$/);
+    if (eventId) {
+      const id = Number(eventId[1]);
+      if (method === 'PUT') {
+        const b = (await request.json()) as { name?: string };
+        if (!b.name) return json({ error: 'name required' }, 400);
+        const ok = await updateEvent(db, id, { name: b.name });
+        return json({ ok }, ok ? 200 : 404);
+      }
+      if (method === 'DELETE') {
+        const ok = await deleteEvent(db, id);
+        return json({ ok }, ok ? 200 : 404);
       }
     }
 
-    // --- members ---
-    if (path === '/members') {
-      if (request.method === 'GET') {
-        return json(await getAllMembers(db));
+    // ============ segments ============
+    if (path === '/segments') {
+      if (method === 'GET') return json(await listSegments(db));
+      if (method === 'POST') {
+        const b = (await request.json()) as { name?: string; mention_role_id?: string | null };
+        if (!b.name) return json({ error: 'name required' }, 400);
+        return json(
+          await createSegment(db, { name: b.name, mention_role_id: b.mention_role_id ?? null }),
+          201,
+        );
       }
-      if (request.method === 'POST') {
+    }
+    // /segments/:id/members/:userId
+    const segMemberItem = path.match(/^\/segments\/(\d+)\/members\/(.+)$/);
+    if (segMemberItem) {
+      const segmentId = Number(segMemberItem[1]);
+      const userId = decodeURIComponent(segMemberItem[2]);
+      if (method === 'PUT') {
+        const b = (await request.json()) as { status?: string };
+        if (b.status === undefined) return json({ error: 'status required' }, 400);
+        // status は '' / '休止中' の2値固定。不正値は集計母集団からの静かな脱落を招くため弾く。
+        if (b.status !== '' && b.status !== '休止中') {
+          return json({ error: "status must be '' or '休止中'" }, 400);
+        }
+        const ok = await setSegmentMemberStatus(db, segmentId, userId, b.status);
+        return json({ ok }, ok ? 200 : 404);
+      }
+      if (method === 'DELETE') {
+        const ok = await removeSegmentMember(db, segmentId, userId);
+        return json({ ok }, ok ? 200 : 404);
+      }
+    }
+    // /segments/:id/members
+    const segMembers = path.match(/^\/segments\/(\d+)\/members$/);
+    if (segMembers) {
+      const segmentId = Number(segMembers[1]);
+      if (method === 'GET') return json(await listSegmentMembers(db, segmentId));
+      if (method === 'POST') {
+        const b = (await request.json()) as { user_id?: string };
+        if (!b.user_id) return json({ error: 'user_id required' }, 400);
+        await addSegmentMember(db, segmentId, b.user_id);
+        return json({ ok: true }, 201);
+      }
+    }
+    // /segments/:id
+    const segId = path.match(/^\/segments\/(\d+)$/);
+    if (segId) {
+      const id = Number(segId[1]);
+      if (method === 'PUT') {
+        const b = (await request.json()) as { name?: string; mention_role_id?: string | null };
+        if (!b.name) return json({ error: 'name required' }, 400);
+        const ok = await updateSegment(db, id, {
+          name: b.name,
+          mention_role_id: b.mention_role_id ?? null,
+        });
+        return json({ ok }, ok ? 200 : 404);
+      }
+      if (method === 'DELETE') {
+        // 対象 Notification がある場合は削除させない（409）
+        const count = await countNotificationsForSegment(db, id);
+        if (count > 0) {
+          return json({ error: 'segment has notifications', count }, 409);
+        }
+        const ok = await deleteSegment(db, id);
+        return json({ ok }, ok ? 200 : 404);
+      }
+    }
+
+    // ============ members ============
+    if (path === '/members') {
+      if (method === 'GET') return json(await getAllMembers(db));
+      if (method === 'POST') {
         const m = (await request.json()) as {
           user_id?: string;
           user_name?: string | null;
-          status?: string;
           display_name?: string | null;
         };
         if (!m.user_id) return json({ error: 'user_id required' }, 400);
         await upsertMember(db, {
           user_id: m.user_id,
           user_name: m.user_name ?? null,
-          status: m.status ?? '',
           display_name: m.display_name ?? null,
         });
         return json({ ok: true });
       }
     }
-
     const memberDelete = path.match(/^\/members\/(.+)$/);
-    if (memberDelete && request.method === 'DELETE') {
+    if (memberDelete && method === 'DELETE') {
       const ok = await deleteMember(db, decodeURIComponent(memberDelete[1]));
       return json({ ok }, ok ? 200 : 404);
     }
 
-    // --- event-log ---
-    if (path === '/event-log' && request.method === 'GET') {
-      const limit = Number(url.searchParams.get('limit') || '200');
-      return json(await listRecentEventLogs(db, limit));
+    // ============ notifications ============
+    if (path === '/notifications') {
+      if (method === 'GET') return json(await listNotifications(db));
+      if (method === 'POST') {
+        const input = toNotificationInput((await request.json()) as Record<string, unknown>);
+        if (!input) return json({ error: 'Invalid body' }, 400);
+        return json(await createNotification(db, input), 201);
+      }
+    }
+    // /notifications/:id/occurrences
+    const notifOccs = path.match(/^\/notifications\/(\d+)\/occurrences$/);
+    if (notifOccs && method === 'GET') {
+      const id = Number(notifOccs[1]);
+      const limit = parseLimit(url.searchParams.get('limit'), 100);
+      return json(await listOccurrencesForNotification(db, id, limit));
+    }
+    // /notifications/:id
+    const notifId = path.match(/^\/notifications\/(\d+)$/);
+    if (notifId) {
+      const id = Number(notifId[1]);
+      if (method === 'GET') {
+        const row = await getNotification(db, id);
+        return row ? json(row) : json({ error: 'Not found' }, 404);
+      }
+      if (method === 'PUT') {
+        const input = toNotificationInput((await request.json()) as Record<string, unknown>);
+        if (!input) return json({ error: 'Invalid body' }, 400);
+        const ok = await updateNotification(db, id, input);
+        return json({ ok }, ok ? 200 : 404);
+      }
+      if (method === 'DELETE') {
+        const ok = await deleteNotification(db, id);
+        return json({ ok }, ok ? 200 : 404);
+      }
+    }
+
+    // ============ occurrences ============
+    // /occurrences/:id/assign
+    const occAssign = path.match(/^\/occurrences\/(\d+)\/assign$/);
+    if (occAssign && method === 'POST') {
+      const id = Number(occAssign[1]);
+      return json(await assignNumbers(db, id));
+    }
+    // /occurrences/:id/responses
+    const occResponses = path.match(/^\/occurrences\/(\d+)\/responses$/);
+    if (occResponses && method === 'GET') {
+      const id = Number(occResponses[1]);
+      return json(await getResponsesForOccurrence(db, id));
+    }
+    // /occurrences/:id/assignments
+    const occAssignments = path.match(/^\/occurrences\/(\d+)\/assignments$/);
+    if (occAssignments && method === 'GET') {
+      const id = Number(occAssignments[1]);
+      return json(await getAssignments(db, id));
+    }
+    // /occurrences/:id ({status|date})
+    const occId = path.match(/^\/occurrences\/(\d+)$/);
+    if (occId && method === 'PUT') {
+      const id = Number(occId[1]);
+      const b = (await request.json()) as { status?: string; date?: string };
+      if (b.status !== undefined) {
+        if (b.status !== 'scheduled' && b.status !== 'cancelled') {
+          return json({ error: 'invalid status' }, 400);
+        }
+        const ok = await setOccurrenceStatus(db, id, b.status);
+        return json({ ok }, ok ? 200 : 404);
+      }
+      if (b.date !== undefined) {
+        if (!b.date) return json({ error: 'date required' }, 400);
+        const ok = await updateOccurrenceDate(db, id, b.date);
+        return json({ ok }, ok ? 200 : 404);
+      }
+      return json({ error: 'status or date required' }, 400);
+    }
+
+    // ============ responses ============
+    if (path === '/responses' && method === 'GET') {
+      const limit = parseLimit(url.searchParams.get('limit'), 200);
+      return json(await listRecentResponses(db, limit));
     }
 
     return json({ error: 'Not found' }, 404);

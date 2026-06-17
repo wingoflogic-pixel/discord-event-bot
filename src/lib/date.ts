@@ -69,3 +69,24 @@ export function getDaysUntilEvent(targetDate: Date, now: Date = getJSTNow()): nu
   today.setHours(0, 0, 0, 0);
   return Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * 'YYYY/MM/DD' を JST 壁時計の Date として解釈する。
+ *
+ * new Date(y, m-1, d) はローカルタイムゾーン基準で Date を構築する。
+ * UTC ランタイム前提では getJSTNow() のローカルゲッターが JST 値を返すのと整合し、
+ * ここで作る Date のローカルゲッター（getFullYear 等）も JST カレンダー値になる。
+ * 不正形式の場合は Invalid Date を返す。
+ */
+export function parseJSTDate(s: string): Date {
+  const [year, month, day] = s.split('/').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * 'YYYY/MM/DD' と今日(JST)との日数差。
+ * 内部で parseJSTDate により JST 壁時計の Date に変換し、getDaysUntilEvent で比較する。
+ */
+export function getDaysUntil(dateStr: string, now: Date = getJSTNow()): number {
+  return getDaysUntilEvent(parseJSTDate(dateStr), now);
+}

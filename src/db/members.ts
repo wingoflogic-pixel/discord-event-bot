@@ -1,17 +1,14 @@
 import type { Member } from './types';
 
-const COLS = 'user_id, user_name, status, display_name, dm_channel_id, created_at';
+// 休止状態は segment_members 側に持つため members に status 列は無い
+const COLS = 'user_id, user_name, display_name, dm_channel_id, created_at';
 
-function normalize(row: Member): Member {
-  return { ...row, status: row.status ?? '' };
-}
-
-/** 全メンバー取得（旧 getAllMembers） */
+/** 全メンバー取得（作成順） */
 export async function getAllMembers(db: D1Database): Promise<Member[]> {
   const { results } = await db
     .prepare(`SELECT ${COLS} FROM members ORDER BY created_at`)
     .all<Member>();
-  return results.map(normalize);
+  return results;
 }
 
 /** 単一メンバー取得（未登録なら null） */
@@ -20,7 +17,7 @@ export async function getMember(db: D1Database, userId: string): Promise<Member 
     .prepare(`SELECT ${COLS} FROM members WHERE user_id = ?`)
     .bind(userId)
     .first<Member>();
-  return row ? normalize(row) : null;
+  return row ?? null;
 }
 
 /** 新メンバー追加（旧 addMember）。既存なら 'exists' */
@@ -33,23 +30,10 @@ export async function addMember(
   const existing = await getMember(db, userId);
   if (existing) return 'exists';
   await db
-    .prepare('INSERT INTO members (user_id, user_name, status, display_name) VALUES (?, ?, ?, ?)')
-    .bind(userId, userName ?? null, '', displayName ?? null)
+    .prepare('INSERT INTO members (user_id, user_name, display_name) VALUES (?, ?, ?)')
+    .bind(userId, userName ?? null, displayName ?? null)
     .run();
   return 'added';
-}
-
-/** ステータス更新（旧 setMemberStatus）。対象が無ければ false */
-export async function setMemberStatus(
-  db: D1Database,
-  userId: string,
-  status: string,
-): Promise<boolean> {
-  const res = await db
-    .prepare('UPDATE members SET status = ? WHERE user_id = ?')
-    .bind(status, userId)
-    .run();
-  return (res.meta.changes ?? 0) > 0;
 }
 
 /**
@@ -92,28 +76,52 @@ export async function setDmChannelId(
     .run();
 }
 
+/**
+ * メンバーが存在しなければ追加（ボタン応答からの自動登録用）。
+ * 既存メンバーには触れない（表示名更新は updateMemberDisplayName 側で行う）。
+ */
+export async function ensureMember(
+  db: D1Database,
+  userId: string,
+  userName: string | null,
+  displayName: string | null,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO members (user_id, user_name, display_name) VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO NOTHING`,
+    )
+    .bind(userId, userName ?? null, displayName ?? null)
+    .run();
+}
+
 // --- 管理 UI 用 CRUD ---
 
 /** メンバーの作成/更新（管理 UI）。user_id をキーに upsert */
 export async function upsertMember(
   db: D1Database,
-  m: { user_id: string; user_name?: string | null; status?: string; display_name?: string | null },
+  m: { user_id: string; user_name?: string | null; display_name?: string | null },
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO members (user_id, user_name, status, display_name)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO members (user_id, user_name, display_name)
+       VALUES (?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          user_name = excluded.user_name,
-         status = excluded.status,
          display_name = excluded.display_name`,
     )
-    .bind(m.user_id, m.user_name ?? null, m.status ?? '', m.display_name ?? null)
+    .bind(m.user_id, m.user_name ?? null, m.display_name ?? null)
     .run();
 }
 
-/** メンバー削除（管理 UI）。削除した場合 true */
+/**
+ * メンバー削除（管理 UI）。削除した場合 true。
+ * 全 segment_members / responses / assignments からも掃除する。
+ */
 export async function deleteMember(db: D1Database, userId: string): Promise<boolean> {
+  await db.prepare('DELETE FROM segment_members WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM responses WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM assignments WHERE user_id = ?').bind(userId).run();
   const res = await db.prepare('DELETE FROM members WHERE user_id = ?').bind(userId).run();
   return (res.meta.changes ?? 0) > 0;
 }
