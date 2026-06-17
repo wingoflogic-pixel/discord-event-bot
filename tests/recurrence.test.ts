@@ -31,6 +31,7 @@ function makeNotification(over: Partial<Notification>): Notification {
     assignment_enabled: 0,
     mention_enabled: 1,
     active: 1,
+    decided_occurrence_id: null,
     created_at: '',
     ...over,
   };

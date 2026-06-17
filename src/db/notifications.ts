@@ -1,9 +1,11 @@
 import type { Notification, NotificationType } from './types';
+import { listOccurrencesForNotification, setOccurrenceStatus } from './occurrences';
 
 const COLS =
   'id, guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time, ' +
   'recruit_days_before, remind_start_days, remind_undecided_days, ' +
-  'quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active, created_at';
+  'quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active, ' +
+  'decided_occurrence_id, created_at';
 
 /** Notification 作成/更新の入力（数値フラグは 0/1） */
 export interface NotificationInput {
@@ -113,7 +115,7 @@ export async function createNotification(
     .run();
   const id = res.meta.last_row_id as number;
   const row = await getNotification(db, id);
-  return row ?? { id, created_at: '', ...input };
+  return row ?? { id, created_at: '', decided_occurrence_id: null, ...input };
 }
 
 /** Notification 更新。対象が無ければ false */
@@ -153,6 +155,53 @@ export async function updateNotification(
     )
     .run();
   return (res.meta.changes ?? 0) > 0;
+}
+
+/**
+ * 単発・複数候補日の確定回を設定/解除する（occurrences.id または NULL）。
+ * 候補回の cancel/復活は呼び出し側（admin）で行う。対象通知が無ければ false。
+ */
+export async function setDecidedOccurrence(
+  db: D1Database,
+  notificationId: number,
+  occurrenceId: number | null,
+): Promise<boolean> {
+  const res = await db
+    .prepare('UPDATE notifications SET decided_occurrence_id = ? WHERE id = ?')
+    .bind(occurrenceId, notificationId)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/**
+ * 複数候補日の最終確定。指定回を scheduled に保ち、他の候補回（scheduled）を cancelled にして
+ * decided_occurrence_id を設定する。回答は保全（occurrences/responses は消さない）。
+ */
+export async function decideOccurrence(
+  db: D1Database,
+  notificationId: number,
+  occurrenceId: number,
+): Promise<void> {
+  await setOccurrenceStatus(db, occurrenceId, 'scheduled');
+  const all = await listOccurrencesForNotification(db, notificationId, 1000);
+  for (const o of all) {
+    if (o.id !== occurrenceId && o.status === 'scheduled') {
+      await setOccurrenceStatus(db, o.id, 'cancelled');
+    }
+  }
+  await setDecidedOccurrence(db, notificationId, occurrenceId);
+}
+
+/** 確定解除。decided_occurrence_id を NULL に戻し、cancelled な候補回を scheduled に復活する。 */
+export async function undecideNotification(
+  db: D1Database,
+  notificationId: number,
+): Promise<void> {
+  await setDecidedOccurrence(db, notificationId, null);
+  const all = await listOccurrencesForNotification(db, notificationId, 1000);
+  for (const o of all) {
+    if (o.status === 'cancelled') await setOccurrenceStatus(db, o.id, 'scheduled');
+  }
 }
 
 /**

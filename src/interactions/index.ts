@@ -1,13 +1,9 @@
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
 import type { Env } from '../env';
-import type { Notification, Segment } from '../db/types';
+import type { Notification } from '../db/types';
 import { ensureMember, updateMemberDisplayName, getAllMembers } from '../db/members';
 import { getNotification, listNotificationsByChannel } from '../db/notifications';
-import {
-  getOccurrence,
-  getOrCreateOccurrence,
-  getLatestScheduledOccurrence,
-} from '../db/occurrences';
+import { getOccurrence, getLatestScheduledOccurrence } from '../db/occurrences';
 import {
   getSegment,
   addSegmentMember,
@@ -17,19 +13,10 @@ import {
 } from '../db/segments';
 import { upsertResponse, getStatusBuckets } from '../db/responses';
 import { assignNumbers } from '../db/assignments';
-import {
-  sendChannelMessage,
-  createButtonComponents,
-  buildStatusMessage,
-  buildMentionPrefix,
-} from '../discord/rest';
-import { nextOccurrenceDate } from '../lib/recurrence';
-import { parseJSTDate } from '../lib/date';
+import { sendChannelMessage, buildStatusMessage } from '../discord/rest';
+import { recruitNotificationNow } from '../cron/dailyCheck';
 
 const EPHEMERAL = 64;
-
-/** 曜日（日本語・JST）。parseJSTDate(...).getDay() で索引 */
-const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
 interface DiscordUser {
   id: string;
@@ -75,16 +62,6 @@ const STATUS_MAP: Record<string, string> = {
   absent: '不参加',
   undecided: '未定',
 };
-
-/** 募集メッセージ本文を組み立てる（cron の sendRecruitment と同形式） */
-function buildRecruitMessage(n: Notification, segment: Segment, dateStr: string): string {
-  const wd = WEEKDAY_JA[parseJSTDate(dateStr).getDay()] ?? '';
-  return (
-    `${buildMentionPrefix(segment, n.mention_enabled === 1)}📅 **イベント募集開始!**\n\n` +
-    `日時: **${dateStr} (${wd}) ${n.start_time}~**\n\n` +
-    `参加状況を下のボタンで回答してください!`
-  );
-}
 
 /** スラッシュコマンドの option を名前で引く */
 function getOption(
@@ -195,32 +172,15 @@ function isEphemeralResponse(v: unknown): v is InteractionResponse {
   return typeof v === 'object' && v !== null && typeof (v as { type?: unknown }).type === 'number';
 }
 
-/** /recruit notification_id — 指定 Notification の次回開催で occ を getOrCreate し募集投稿 */
+/** /recruit — チャンネルの Notification を解決し、単発・複数候補日にも対応して募集投稿 */
 async function handleRecruit(
   interaction: DiscordInteraction,
   env: Env,
 ): Promise<InteractionResponse> {
-  const db = env.DB;
-  const resolved = await resolveNotification(db, interaction);
+  const resolved = await resolveNotification(env.DB, interaction);
   if (isEphemeralResponse(resolved)) return resolved;
-  const n = resolved;
-
-  const target = nextOccurrenceDate(n);
-  if (!target) return ephemeral('❌ 次回の開催日を特定できませんでした（rrule / one_off_date を確認してください）。');
-
-  const segment = await getSegment(db, n.segment_id);
-  if (!segment) return ephemeral(`❌ 対象の区分 #${n.segment_id} が見つかりません。`);
-
-  const occ = await getOrCreateOccurrence(db, n.id, target);
-  if (occ.status === 'cancelled') {
-    return ephemeral(`⚠️ **${target}** の開催回は中止扱いのため募集できません。`);
-  }
-
-  const message = buildRecruitMessage(n, segment, target);
-  const ok = await sendChannelMessage(env, n.channel_id, message, createButtonComponents(occ.id));
-  return ok
-    ? ephemeral(`✅ **${target}** の募集メッセージを送信しました!`)
-    : ephemeral('❌ 募集メッセージの送信に失敗しました。');
+  const r = await recruitNotificationNow(env, resolved);
+  return ephemeral((r.ok ? '✅ ' : '❌ ') + r.message);
 }
 
 /** /assign notification_id — 最新の予定回に assignNumbers し、結果を公開投稿＋実行者へ要約 */

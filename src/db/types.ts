@@ -71,6 +71,11 @@ export interface Notification {
   mention_enabled: number;
   /** 0/1 */
   active: number;
+  /**
+   * 単発・複数候補日で確定した開催回の id（occurrences.id）。NULL=未確定。
+   * 確定すると当該回以外の候補は cancelled になり、cron はこの回のみを対象にする。
+   */
+  decided_occurrence_id: number | null;
   created_at: string;
 }
 

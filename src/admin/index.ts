@@ -20,15 +20,21 @@ import {
   createNotification,
   updateNotification,
   deleteNotification,
+  decideOccurrence,
+  undecideNotification,
   type NotificationInput,
 } from '../db/notifications';
 import {
+  getOccurrence,
   setOccurrenceStatus,
   updateOccurrenceDate,
   listOccurrencesForNotification,
+  syncCandidateOccurrences,
 } from '../db/occurrences';
-import { getResponsesForOccurrence, listRecentResponses } from '../db/responses';
+import { getResponsesForOccurrence, getStatusBuckets, listRecentResponses } from '../db/responses';
 import { getAssignments, assignNumbers } from '../db/assignments';
+import { sendChannelMessage } from '../discord/rest';
+import { recruitNotificationNow } from '../cron/dailyCheck';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -48,6 +54,22 @@ function num(v: unknown, def: number): number {
   if (v === '' || v == null) return def;
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
+}
+
+/**
+ * 単発(oneoff)の候補日配列を正規化する。
+ * body.candidate_dates（'YYYY-MM-DD' / 'YYYY/MM/DD' の配列）を 'YYYY/MM/DD' に統一し、
+ * 重複除去・昇順ソート。未指定なら後方互換で単一 one_off_date を 1 要素として使う。
+ */
+function candidateDatesOf(b: Record<string, unknown>, fallbackSingle: string | null): string[] {
+  const raw = b.candidate_dates;
+  const arr = Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+    : [];
+  const norm = arr.map((s) => s.replace(/-/g, '/').trim());
+  const uniq = [...new Set(norm)].sort();
+  if (uniq.length) return uniq;
+  return fallbackSingle ? [fallbackSingle] : [];
 }
 
 /** 定数時間比較（トークン照合） */
@@ -111,8 +133,14 @@ function toNotificationInput(b: Record<string, unknown>): NotificationInput | nu
  * - PUT/DELETE /segments/:id/members/:userId  ({status} for PUT)
  * - GET/POST   /members,                      DELETE /members/:userId
  * - GET/POST   /notifications[?guild_id=],    GET/PUT/DELETE /notifications/:id
- * - GET        /notifications/:id/occurrences,PUT /occurrences/:id ({status|date})
- * - GET        /occurrences/:id/responses,    GET /occurrences/:id/assignments
+ *              （POST/PUT で type='oneoff' は body.candidate_dates[] を候補回として同期）
+ * - GET        /notifications/:id/occurrences
+ * - POST       /notifications/:id/decide      ({occurrence_id} 最終確定・他候補を cancel)
+ * - POST       /notifications/:id/undecide    (確定解除・落選候補を復活)
+ * - POST       /notifications/:id/recruit     (今すぐ募集を投稿)
+ * - PUT        /occurrences/:id               ({status|date})
+ * - GET        /occurrences/:id/responses,    GET /occurrences/:id/status (集計バケット)
+ * - GET        /occurrences/:id/assignments
  * - POST       /occurrences/:id/assign        (assignNumbers 実行)
  * - GET        /responses?limit=
  */
@@ -250,8 +278,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         return json(guildId ? await listNotificationsByGuild(db, guildId) : await listNotifications(db));
       }
       if (method === 'POST') {
-        const input = toNotificationInput((await request.json()) as Record<string, unknown>);
+        const body = (await request.json()) as Record<string, unknown>;
+        const input = toNotificationInput(body);
         if (!input) return json({ error: 'Invalid body' }, 400);
+        if (input.type === 'oneoff') {
+          const dates = candidateDatesOf(body, input.one_off_date);
+          if (dates.length === 0) return json({ error: '単発は候補日が必須です' }, 400);
+          input.one_off_date = dates[0]; // 最早候補日をスケジュール計算の基準に
+          const created = await createNotification(db, input);
+          await syncCandidateOccurrences(db, created.id, dates);
+          return json(created, 201);
+        }
         return json(await createNotification(db, input), 201);
       }
     }
@@ -262,6 +299,46 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const limit = parseLimit(url.searchParams.get('limit'), 100);
       return json(await listOccurrencesForNotification(db, id, limit));
     }
+    // /notifications/:id/decide （複数候補日の最終確定）
+    const notifDecide = path.match(/^\/notifications\/(\d+)\/decide$/);
+    if (notifDecide && method === 'POST') {
+      const nid = Number(notifDecide[1]);
+      const b = (await request.json()) as { occurrence_id?: number };
+      const occId = Number(b.occurrence_id);
+      if (!Number.isInteger(occId)) return json({ error: 'occurrence_id required' }, 400);
+      const n = await getNotification(db, nid);
+      if (!n) return json({ error: 'Not found' }, 404);
+      const occ = await getOccurrence(db, occId);
+      if (!occ || occ.notification_id !== nid) {
+        return json({ error: 'occurrence does not belong to notification' }, 400);
+      }
+      await decideOccurrence(db, nid, occId);
+      // 確定アナウンス（投稿失敗は致命的でない）
+      const announced = await sendChannelMessage(
+        env,
+        n.channel_id,
+        `✅ **開催日が確定しました**\n\n**${occ.occurrence_date}** ${n.start_time}~ に開催します！`,
+      );
+      return json({ ok: true, decided_occurrence_id: occId, announced });
+    }
+    // /notifications/:id/undecide （確定解除：落選候補を scheduled に戻す）
+    const notifUndecide = path.match(/^\/notifications\/(\d+)\/undecide$/);
+    if (notifUndecide && method === 'POST') {
+      const nid = Number(notifUndecide[1]);
+      const n = await getNotification(db, nid);
+      if (!n) return json({ error: 'Not found' }, 404);
+      await undecideNotification(db, nid);
+      return json({ ok: true });
+    }
+    // /notifications/:id/recruit （管理画面から今すぐ募集を投稿）
+    const notifRecruit = path.match(/^\/notifications\/(\d+)\/recruit$/);
+    if (notifRecruit && method === 'POST') {
+      const nid = Number(notifRecruit[1]);
+      const n = await getNotification(db, nid);
+      if (!n) return json({ error: 'Not found' }, 404);
+      const r = await recruitNotificationNow(env, n);
+      return json(r, r.ok ? 200 : 400);
+    }
     // /notifications/:id
     const notifId = path.match(/^\/notifications\/(\d+)$/);
     if (notifId) {
@@ -271,8 +348,22 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         return row ? json(row) : json({ error: 'Not found' }, 404);
       }
       if (method === 'PUT') {
-        const input = toNotificationInput((await request.json()) as Record<string, unknown>);
+        const body = (await request.json()) as Record<string, unknown>;
+        const input = toNotificationInput(body);
         if (!input) return json({ error: 'Invalid body' }, 400);
+        if (input.type === 'oneoff') {
+          const dates = candidateDatesOf(body, input.one_off_date);
+          if (dates.length === 0) return json({ error: '単発は候補日が必須です' }, 400);
+          input.one_off_date = dates[0]; // 最早候補日を基準に
+          const ok = await updateNotification(db, id, input);
+          if (!ok) return json({ ok }, 404);
+          // 確定済み（decided_occurrence_id 設定済み）は候補を再同期しない（落選回の復活を防ぐ）。
+          const current = await getNotification(db, id);
+          if (current && current.decided_occurrence_id == null) {
+            await syncCandidateOccurrences(db, id, dates);
+          }
+          return json({ ok });
+        }
         const ok = await updateNotification(db, id, input);
         return json({ ok }, ok ? 200 : 404);
       }
@@ -294,6 +385,16 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     if (occResponses && method === 'GET') {
       const id = Number(occResponses[1]);
       return json(await getResponsesForOccurrence(db, id));
+    }
+    // /occurrences/:id/status （候補日ごとの出欠集計バケット）
+    const occStatus = path.match(/^\/occurrences\/(\d+)\/status$/);
+    if (occStatus && method === 'GET') {
+      const id = Number(occStatus[1]);
+      const occ = await getOccurrence(db, id);
+      if (!occ) return json({ error: 'Not found' }, 404);
+      const n = await getNotification(db, occ.notification_id);
+      if (!n) return json({ error: 'Not found' }, 404);
+      return json(await getStatusBuckets(db, id, n.segment_id));
     }
     // /occurrences/:id/assignments
     const occAssignments = path.match(/^\/occurrences\/(\d+)\/assignments$/);

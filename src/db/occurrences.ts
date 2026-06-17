@@ -104,3 +104,56 @@ export async function listOccurrencesForNotification(
     .all<Occurrence>();
   return results;
 }
+
+/**
+ * Notification の予定回（status='scheduled'）を日付昇順で返す。
+ * 単発・複数候補日の「候補日の母集合」として募集・集計に使う。
+ */
+export async function listScheduledOccurrences(
+  db: D1Database,
+  notificationId: number,
+): Promise<Occurrence[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${COLS} FROM occurrences
+        WHERE notification_id = ? AND status = 'scheduled'
+        ORDER BY occurrence_date ASC`,
+    )
+    .bind(notificationId)
+    .all<Occurrence>();
+  return results;
+}
+
+/**
+ * 候補日集合に occurrences を揃える（単発の複数候補日用）。
+ * - dates に在って未登録 → 作成。cancelled だった回は scheduled に復活。
+ * - dates に無いのに scheduled な回 → cancelled にする（既存回答を失わないよう DELETE しない）。
+ * recurring は遅延生成のため呼ばない（呼び出し側 admin が type='oneoff' に限定する）。
+ * 返り値: 同期後の scheduled な occurrences（日付昇順）。
+ */
+export async function syncCandidateOccurrences(
+  db: D1Database,
+  notificationId: number,
+  dates: string[],
+): Promise<Occurrence[]> {
+  const wanted = new Set(dates);
+  const { results: existing } = await db
+    .prepare(`SELECT ${COLS} FROM occurrences WHERE notification_id = ?`)
+    .bind(notificationId)
+    .all<Occurrence>();
+  const byDate = new Map(existing.map((o) => [o.occurrence_date, o]));
+
+  // 1. 欲しい候補日を確保（未登録は作成 / cancelled は復活）
+  for (const d of wanted) {
+    const cur = byDate.get(d);
+    if (!cur) await getOrCreateOccurrence(db, notificationId, d);
+    else if (cur.status === 'cancelled') await setOccurrenceStatus(db, cur.id, 'scheduled');
+  }
+  // 2. 候補から外れた scheduled 回は cancelled に
+  for (const o of existing) {
+    if (o.status === 'scheduled' && !wanted.has(o.occurrence_date)) {
+      await setOccurrenceStatus(db, o.id, 'cancelled');
+    }
+  }
+  return listScheduledOccurrences(db, notificationId);
+}
