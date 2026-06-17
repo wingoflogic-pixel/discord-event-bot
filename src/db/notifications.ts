@@ -1,13 +1,13 @@
 import type { Notification, NotificationType } from './types';
 
 const COLS =
-  'id, event_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time, ' +
+  'id, guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time, ' +
   'recruit_days_before, remind_start_days, remind_undecided_days, ' +
   'quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active, created_at';
 
 /** Notification 作成/更新の入力（数値フラグは 0/1） */
 export interface NotificationInput {
-  event_id: number;
+  guild_id: string;
   segment_id: number;
   name: string;
   channel_id: string;
@@ -54,14 +54,26 @@ export async function getNotification(
   return row ?? null;
 }
 
-/** Event 配下の Notification 一覧 */
-export async function listNotificationsByEvent(
+/** チャンネルに紐づく active な Notification 一覧 */
+export async function listNotificationsByChannel(
   db: D1Database,
-  eventId: number,
+  channelId: string,
 ): Promise<Notification[]> {
   const { results } = await db
-    .prepare(`SELECT ${COLS} FROM notifications WHERE event_id = ? ORDER BY created_at`)
-    .bind(eventId)
+    .prepare(`SELECT ${COLS} FROM notifications WHERE channel_id = ? AND active = 1 ORDER BY created_at`)
+    .bind(channelId)
+    .all<Notification>();
+  return results;
+}
+
+/** Server(guild_id) 配下の Notification 一覧 */
+export async function listNotificationsByGuild(
+  db: D1Database,
+  guildId: string,
+): Promise<Notification[]> {
+  const { results } = await db
+    .prepare(`SELECT ${COLS} FROM notifications WHERE guild_id = ? ORDER BY created_at`)
+    .bind(guildId)
     .all<Notification>();
   return results;
 }
@@ -74,13 +86,13 @@ export async function createNotification(
   const res = await db
     .prepare(
       `INSERT INTO notifications (
-         event_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time,
+         guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time,
          recruit_days_before, remind_start_days, remind_undecided_days,
          quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
-      input.event_id,
+      input.guild_id,
       input.segment_id,
       input.name,
       input.channel_id,
@@ -113,14 +125,14 @@ export async function updateNotification(
   const res = await db
     .prepare(
       `UPDATE notifications SET
-         event_id = ?, segment_id = ?, name = ?, channel_id = ?, type = ?, rrule = ?,
+         guild_id = ?, segment_id = ?, name = ?, channel_id = ?, type = ?, rrule = ?,
          one_off_date = ?, anchor_date = ?, start_time = ?, recruit_days_before = ?, remind_start_days = ?,
          remind_undecided_days = ?, quota_enabled = ?, quota_interval_days = ?,
          assignment_enabled = ?, mention_enabled = ?, active = ?
        WHERE id = ?`,
     )
     .bind(
-      patch.event_id,
+      patch.guild_id,
       patch.segment_id,
       patch.name,
       patch.channel_id,

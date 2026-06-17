@@ -1,4 +1,5 @@
 -- 汎用リデザイン: 単一定例モデル → Event ＞ Notification → Segment ＞ Occurrence
+-- ※ Event 層は後続の ADR 0005 / migration 0004 で廃止し、Notification は guild_id で Server に直結する。
 -- ⚠️ 破壊的マイグレーション。旧 config / members / event_log を破棄して再構築する。
 --    本番データは存在せず（本番は旧 Vercel 版が別系統で稼働）、テスト D1 のデータは使い捨て前提。
 

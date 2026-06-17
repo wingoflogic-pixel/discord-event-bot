@@ -134,3 +134,101 @@ export async function sendDirectMessageCached(
   }
   return postMessage(env, channelId, content, components);
 }
+
+// =============================================================
+// 管理 UI 用の Discord 読み取り（サーバー / チャンネル / メンバーのピッカー）
+// すべて GET（読み取り専用）。MOCK_DISCORD 時はフィクスチャを返し外部へ出ない（ADR 0008）。
+// =============================================================
+
+/** bot が参加しているサーバー（最上位スコープ・ADR 0004） */
+export interface GuildSummary {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+/** 投稿先に選べるテキストチャンネル */
+export interface ChannelSummary {
+  id: string;
+  name: string;
+}
+/** メンバーピッカーの 1 候補（サーバー内ニック付き・ADR 0006） */
+export interface GuildMemberSummary {
+  user_id: string;
+  user_name: string | null;
+  display_name: string | null;
+}
+
+const MOCK_GUILDS: GuildSummary[] = [
+  { id: '1001', name: '土曜サークル', icon: null },
+  { id: '1002', name: '音楽部の集い', icon: null },
+];
+const MOCK_CHANNELS: ChannelSummary[] = [
+  { id: '2001', name: '出欠' },
+  { id: '2002', name: '雑談' },
+  { id: '2003', name: 'スタッフ連絡' },
+];
+const MOCK_MEMBERS: GuildMemberSummary[] = [
+  { user_id: '3001', user_name: 'aoi', display_name: 'あおい' },
+  { user_id: '3002', user_name: 'kenta', display_name: 'けんた' },
+  { user_id: '3003', user_name: 'miki', display_name: 'みき' },
+];
+
+function botHeaders(env: Env): HeadersInit {
+  return { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'User-Agent': USER_AGENT };
+}
+
+/** bot の参加サーバー一覧（GET /users/@me/guilds・特権インテント不要） */
+export async function listGuilds(env: Env): Promise<GuildSummary[]> {
+  if (env.MOCK_DISCORD) return MOCK_GUILDS;
+  const res = await fetch(`${API}/users/@me/guilds`, { headers: botHeaders(env) });
+  if (!res.ok) throw new Error(`Discord guilds ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as Array<{ id: string; name: string; icon: string | null }>;
+  return data.map((g) => ({ id: g.id, name: g.name, icon: g.icon ?? null }));
+}
+
+/** サーバーのテキストチャンネル一覧（GET /guilds/:id/channels・特権インテント不要） */
+export async function listGuildChannels(env: Env, guildId: string): Promise<ChannelSummary[]> {
+  if (env.MOCK_DISCORD) return MOCK_CHANNELS;
+  const res = await fetch(`${API}/guilds/${guildId}/channels`, { headers: botHeaders(env) });
+  if (!res.ok) throw new Error(`Discord channels ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as Array<{ id: string; name: string; type: number; position: number }>;
+  // type 0 = GUILD_TEXT / 5 = GUILD_ANNOUNCEMENT。position 昇順で並べる。
+  return data
+    .filter((c) => c.type === 0 || c.type === 5)
+    .sort((a, b) => a.position - b.position)
+    .map((c) => ({ id: c.id, name: c.name }));
+}
+
+/**
+ * サーバーの参加メンバー一覧（GET /guilds/:id/members・**Server Members Intent 必須**・ADR 0006）。
+ * 1000 件ごとにページングし、bot を除外。サーバー内ニック（nick）を表示名候補にする。
+ * インテント未有効時は Discord が 403 を返すため throw する（呼び出し側でハンドリング）。
+ */
+export async function listGuildMembers(env: Env, guildId: string): Promise<GuildMemberSummary[]> {
+  if (env.MOCK_DISCORD) return MOCK_MEMBERS;
+  const out: GuildMemberSummary[] = [];
+  let after = '0';
+  // 上限 20 ページ（2 万件）で打ち切り（暴走防止）。
+  for (let i = 0; i < 20; i++) {
+    const res = await fetch(`${API}/guilds/${guildId}/members?limit=1000&after=${after}`, {
+      headers: botHeaders(env),
+    });
+    if (!res.ok) throw new Error(`Discord members ${res.status}: ${await res.text()}`);
+    const page = (await res.json()) as Array<{
+      user?: { id: string; username?: string; global_name?: string | null; bot?: boolean };
+      nick?: string | null;
+    }>;
+    if (page.length === 0) break;
+    for (const m of page) {
+      if (!m.user || m.user.bot) continue;
+      out.push({
+        user_id: m.user.id,
+        user_name: m.user.username ?? null,
+        display_name: m.nick ?? m.user.global_name ?? m.user.username ?? null,
+      });
+    }
+    after = page[page.length - 1].user?.id ?? after;
+    if (page.length < 1000) break;
+  }
+  return out;
+}

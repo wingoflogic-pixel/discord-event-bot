@@ -11,5 +11,7 @@ export interface Env {
   DISCORD_BOT_TOKEN: string;
   /** 管理 UI / API のアクセストークン */
   ADMIN_TOKEN: string;
+  /** テスト用シーム: 真値のとき Discord API 呼び出しをフィクスチャで代替する（ADR 0008） */
+  MOCK_DISCORD?: string;
   // ※ 投稿チャンネルは Notification ごとに DB が持つため DISCORD_CHANNEL_ID は廃止。
 }

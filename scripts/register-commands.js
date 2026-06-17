@@ -23,15 +23,13 @@ if (!BOT_TOKEN || !APP_ID) {
 const commands = [
   {
     name: 'recruit',
-    description: '指定した通知の募集メッセージを手動で送信します (管理者用)',
+    description: '募集メッセージを送信します (管理者用)',
     default_member_permissions: '8',
-    options: [{ name: 'notification_id', description: '対象の通知ID', type: 4, required: true }],
   },
   {
     name: 'assign',
-    description: '指定した通知の最新開催回に番号を割り当てます (管理者用)',
+    description: '最新開催回に番号を割り当てます (管理者用)',
     default_member_permissions: '8',
-    options: [{ name: 'notification_id', description: '対象の通知ID', type: 4, required: true }],
   },
   {
     name: 'pause',

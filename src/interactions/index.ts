@@ -2,7 +2,7 @@ import { verifyKey, InteractionType, InteractionResponseType } from 'discord-int
 import type { Env } from '../env';
 import type { Notification, Segment } from '../db/types';
 import { ensureMember, updateMemberDisplayName, getAllMembers } from '../db/members';
-import { getNotification } from '../db/notifications';
+import { getNotification, listNotificationsByChannel } from '../db/notifications';
 import {
   getOccurrence,
   getOrCreateOccurrence,
@@ -48,6 +48,8 @@ interface DiscordInteraction {
       members?: Record<string, { nick?: string }>;
     };
   };
+  guild_id?: string;
+  channel_id?: string;
   member?: { user?: DiscordUser; nick?: string };
   user?: DiscordUser;
 }
@@ -174,17 +176,34 @@ async function handleCommand(
   }
 }
 
+/** チャンネルから Notification を解決（1チャンネル1通知前提） */
+async function resolveNotification(
+  db: D1Database,
+  interaction: DiscordInteraction,
+): Promise<Notification | InteractionResponse> {
+  const channelId = interaction.channel_id;
+  if (!channelId) return ephemeral('❌ チャンネルを特定できません。');
+  const list = await listNotificationsByChannel(db, channelId);
+  if (list.length === 0) return ephemeral('❌ このチャンネルに紐づく通知がありません。');
+  if (list.length > 1) return ephemeral('❌ このチャンネルに複数の通知が紐づいています。管理UIで整理してください。');
+  return list[0];
+}
+
+function isEphemeralResponse(v: unknown): v is InteractionResponse {
+  // InteractionResponse.type は数値（InteractionResponseType）。Notification.type は
+  // 'recurring'|'oneoff' の文字列なので、両者とも 'type' を持つ。数値型で確実に弁別する。
+  return typeof v === 'object' && v !== null && typeof (v as { type?: unknown }).type === 'number';
+}
+
 /** /recruit notification_id — 指定 Notification の次回開催で occ を getOrCreate し募集投稿 */
 async function handleRecruit(
   interaction: DiscordInteraction,
   env: Env,
 ): Promise<InteractionResponse> {
   const db = env.DB;
-  const notifId = Number(getOption(interaction, 'notification_id')?.value);
-  if (!Number.isInteger(notifId)) return ephemeral('❌ notification_id が不正です。');
-
-  const n = await getNotification(db, notifId);
-  if (!n) return ephemeral(`❌ Notification #${notifId} が見つかりません。`);
+  const resolved = await resolveNotification(db, interaction);
+  if (isEphemeralResponse(resolved)) return resolved;
+  const n = resolved;
 
   const target = nextOccurrenceDate(n);
   if (!target) return ephemeral('❌ 次回の開催日を特定できませんでした（rrule / one_off_date を確認してください）。');
@@ -210,11 +229,9 @@ async function handleAssign(
   env: Env,
 ): Promise<InteractionResponse> {
   const db = env.DB;
-  const notifId = Number(getOption(interaction, 'notification_id')?.value);
-  if (!Number.isInteger(notifId)) return ephemeral('❌ notification_id が不正です。');
-
-  const n = await getNotification(db, notifId);
-  if (!n) return ephemeral(`❌ Notification #${notifId} が見つかりません。`);
+  const resolved = await resolveNotification(db, interaction);
+  if (isEphemeralResponse(resolved)) return resolved;
+  const n = resolved;
 
   const occ = await getLatestScheduledOccurrence(db, n.id);
   if (!occ) return ephemeral('❌ 割り当て対象の開催回（予定）がありません。');

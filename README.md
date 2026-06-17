@@ -1,7 +1,7 @@
 # ChoiemuEventBot
 
-Discord と連携し、週次イベントの **出欠確認・リマインド・参加ノルマ管理** を自動化する Bot。
-非エンジニアでも運用できるよう、**専用の管理 UI** から設定・メンバーを編集できます。
+Discord と連携し、繰り返し/単発イベントの **出欠確認・リマインド・参加ノルマ管理** を自動化する Bot。
+1 デプロイで**複数の Discord サーバー**を管理でき、非エンジニアでも **専用の管理 UI** から設定・メンバーを編集できます。
 
 > **v6.0**: ホスティングを **Vercel + Google Sheets** から **Cloudflare Workers + D1** へ移行。
 > 登録が必要なサービスは **Discord と Cloudflare の 2 つだけ**、完全無料枠で自己ホストできます。
@@ -10,14 +10,14 @@ Discord と連携し、週次イベントの **出欠確認・リマインド・
 ## 🏗️ アーキテクチャ
 
 ```
-Discord ──▶ Cloudflare Worker (単一デプロイ)
+Discord ──▶ Cloudflare Worker (1 デプロイで複数サーバー)
               ├─ POST /interactions   スラッシュコマンド / ボタン（Ed25519 署名検証）
               ├─ /api/admin/*         管理 API（ADMIN_TOKEN 認証）
               ├─ /* (静的)            管理 UI（SPA・同梱配信）
               └─ scheduled()          日次 cron（募集/リマインド/ノルマ）
                      │ D1 binding
                      ▼
-              Cloudflare D1 (config / members / event_log)
+              Cloudflare D1 (segments / members / notifications / occurrences / responses / assignments)
 ```
 
 ## ✨ 機能
@@ -27,8 +27,8 @@ Discord ──▶ Cloudflare Worker (単一デプロイ)
 - **⏰ リマインド**: 未回答者・未定者へ個別 DM（休止中メンバーは除外）
 - **📊 ノルマ確認**: 参加間隔が空いたメンバーへ DM（休止中メンバーは除外）
 - **👀 状況確認**: `📊 状況確認` ボタンでリアルタイムの参加状況を表示
-- **💬 スラッシュコマンド**（管理者用）: `/recruit` `/pause` `/resume` `/members` `/addmember`
-- **🖥 管理 UI**: 設定・メンバーマスタ・出欠記録をブラウザから編集/閲覧（トークン認証）
+- **💬 スラッシュコマンド**（管理者用）: `/recruit` `/assign` `/pause` `/resume` `/members`
+- **🖥 管理 UI**: サーバー選択 → 通知・メンバー区分・回答履歴をブラウザから編集/閲覧（トークン認証）
 
 ## 📁 プロジェクト構成
 
@@ -38,7 +38,7 @@ src/
   interactions/     Discord Interaction（コマンド/ボタン・署名検証）
   cron/             日次チェック
   admin/            管理 API（トークン認証）
-  db/               D1 データ層（config / members / event_log）
+  db/               D1 データ層（segments / members / notifications / occurrences / responses / assignments）
   discord/          Discord REST（メッセージ/DM）
   lib/date.ts       JST 日付計算
 ui/                 管理 SPA（静的アセット）
@@ -77,8 +77,10 @@ npm run typecheck    # 型チェック
 | `DISCORD_PUBLIC_KEY` | Discord Application Public Key |
 | `DISCORD_APPLICATION_ID` | Application ID（コマンド登録用） |
 | `DISCORD_BOT_TOKEN` | Bot Token |
-| `DISCORD_CHANNEL_ID` | メッセージ送信先チャンネル ID |
 | `ADMIN_TOKEN` | 管理 UI / API のアクセストークン |
+
+> 投稿チャンネルは通知（Notification）ごとに管理 UI で設定するため、単一の `DISCORD_CHANNEL_ID` は廃止されています。
+> メンバーピッカー（参加者一覧の取得）には Discord の **Server Members Intent**（特権）の有効化が必要です。
 
 ## 🕐 Cron
 

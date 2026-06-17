@@ -1,6 +1,6 @@
 import type { Env } from '../env';
 import type { NotificationType } from '../db/types';
-import { listEvents, createEvent, updateEvent, deleteEvent } from '../db/events';
+import { listGuilds, listGuildChannels, listGuildMembers } from '../discord/rest';
 import {
   listSegments,
   createSegment,
@@ -15,6 +15,7 @@ import {
 import { getAllMembers, upsertMember, deleteMember } from '../db/members';
 import {
   listNotifications,
+  listNotificationsByGuild,
   getNotification,
   createNotification,
   updateNotification,
@@ -70,14 +71,14 @@ function authorized(request: Request, env: Env): boolean {
 
 /** Notification の入力ボディを正規化（数値フラグは 0/1） */
 function toNotificationInput(b: Record<string, unknown>): NotificationInput | null {
-  const event_id = Number(b.event_id);
+  const guild_id = typeof b.guild_id === 'string' ? b.guild_id : '';
   const segment_id = Number(b.segment_id);
   const name = typeof b.name === 'string' ? b.name : '';
   const channel_id = typeof b.channel_id === 'string' ? b.channel_id : '';
   const type = (b.type === 'oneoff' ? 'oneoff' : 'recurring') as NotificationType;
-  if (!event_id || !segment_id || !name || !channel_id) return null;
+  if (!guild_id || !segment_id || !name || !channel_id) return null;
   return {
-    event_id,
+    guild_id,
     segment_id,
     name,
     channel_id,
@@ -104,12 +105,12 @@ function toNotificationInput(b: Record<string, unknown>): NotificationInput | nu
 
 /**
  * 管理 API（/api/admin/*）。すべて ADMIN_TOKEN による Bearer 認証必須。すべて JSON。
- * - GET/POST   /events,                       PUT/DELETE /events/:id
- * - GET/POST   /segments,                     PUT/DELETE /segments/:id
- * - GET        /segments/:id/members,         POST /segments/:id/members ({user_id})
+ * - GET        /guilds, /guilds/:id/channels, /guilds/:id/members  (Discord 由来・読み取り専用)
+ * - GET/POST   /segments[?guild_id=],         PUT/DELETE /segments/:id
+ * - GET        /segments/:id/members,         POST /segments/:id/members ({user_id,display_name?,user_name?})
  * - PUT/DELETE /segments/:id/members/:userId  ({status} for PUT)
  * - GET/POST   /members,                      DELETE /members/:userId
- * - GET/POST   /notifications,                GET/PUT/DELETE /notifications/:id
+ * - GET/POST   /notifications[?guild_id=],    GET/PUT/DELETE /notifications/:id
  * - GET        /notifications/:id/occurrences,PUT /occurrences/:id ({status|date})
  * - GET        /occurrences/:id/responses,    GET /occurrences/:id/assignments
  * - POST       /occurrences/:id/assign        (assignNumbers 実行)
@@ -126,38 +127,31 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   const db = env.DB;
 
   try {
-    // ============ events ============
-    if (path === '/events') {
-      if (method === 'GET') return json(await listEvents(db));
-      if (method === 'POST') {
-        const b = (await request.json()) as { name?: string };
-        if (!b.name) return json({ error: 'name required' }, 400);
-        return json(await createEvent(db, b.name), 201);
-      }
+    // ============ guilds（Discord API 由来・読み取り専用）============
+    if (path === '/guilds' && method === 'GET') {
+      return json(await listGuilds(env));
     }
-    const eventId = path.match(/^\/events\/(\d+)$/);
-    if (eventId) {
-      const id = Number(eventId[1]);
-      if (method === 'PUT') {
-        const b = (await request.json()) as { name?: string };
-        if (!b.name) return json({ error: 'name required' }, 400);
-        const ok = await updateEvent(db, id, { name: b.name });
-        return json({ ok }, ok ? 200 : 404);
-      }
-      if (method === 'DELETE') {
-        const ok = await deleteEvent(db, id);
-        return json({ ok }, ok ? 200 : 404);
-      }
+    const guildChannels = path.match(/^\/guilds\/(\d+)\/channels$/);
+    if (guildChannels && method === 'GET') {
+      return json(await listGuildChannels(env, guildChannels[1]));
+    }
+    const guildMembers = path.match(/^\/guilds\/(\d+)\/members$/);
+    if (guildMembers && method === 'GET') {
+      return json(await listGuildMembers(env, guildMembers[1]));
     }
 
     // ============ segments ============
     if (path === '/segments') {
-      if (method === 'GET') return json(await listSegments(db));
+      if (method === 'GET') {
+        const guildId = url.searchParams.get('guild_id') ?? undefined;
+        return json(await listSegments(db, guildId));
+      }
       if (method === 'POST') {
-        const b = (await request.json()) as { name?: string; mention_role_id?: string | null };
+        const b = (await request.json()) as { guild_id?: string; name?: string; mention_role_id?: string | null };
+        if (!b.guild_id) return json({ error: 'guild_id required' }, 400);
         if (!b.name) return json({ error: 'name required' }, 400);
         return json(
-          await createSegment(db, { name: b.name, mention_role_id: b.mention_role_id ?? null }),
+          await createSegment(db, { guild_id: b.guild_id, name: b.name, mention_role_id: b.mention_role_id ?? null }),
           201,
         );
       }
@@ -188,9 +182,16 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const segmentId = Number(segMembers[1]);
       if (method === 'GET') return json(await listSegmentMembers(db, segmentId));
       if (method === 'POST') {
-        const b = (await request.json()) as { user_id?: string };
+        const b = (await request.json()) as {
+          user_id?: string;
+          user_name?: string | null;
+          display_name?: string | null;
+        };
         if (!b.user_id) return json({ error: 'user_id required' }, 400);
-        await addSegmentMember(db, segmentId, b.user_id);
+        await addSegmentMember(db, segmentId, b.user_id, {
+          user_name: b.user_name ?? null,
+          display_name: b.display_name ?? null,
+        });
         return json({ ok: true }, 201);
       }
     }
@@ -244,7 +245,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     // ============ notifications ============
     if (path === '/notifications') {
-      if (method === 'GET') return json(await listNotifications(db));
+      if (method === 'GET') {
+        const guildId = url.searchParams.get('guild_id');
+        return json(guildId ? await listNotificationsByGuild(db, guildId) : await listNotifications(db));
+      }
       if (method === 'POST') {
         const input = toNotificationInput((await request.json()) as Record<string, unknown>);
         if (!input) return json({ error: 'Invalid body' }, 400);

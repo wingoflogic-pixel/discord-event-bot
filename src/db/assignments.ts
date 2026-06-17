@@ -102,14 +102,25 @@ export async function assignNumbers(
   return { assigned, all };
 }
 
-/** 開催回の割り当て一覧（number 昇順） */
+/** 開催回の割り当て一覧（number 昇順・表示名付き）。assignNumbers の all とレスポンス形を揃える */
 export async function getAssignments(
   db: D1Database,
   occurrenceId: number,
-): Promise<{ user_id: string; number: number }[]> {
+): Promise<{ user_id: string; number: number; name: string }[]> {
   const { results } = await db
-    .prepare('SELECT user_id, number FROM assignments WHERE occurrence_id = ? ORDER BY number ASC')
+    .prepare(
+      `SELECT a.user_id AS user_id, a.number AS number,
+              m.user_name AS user_name, m.display_name AS display_name
+         FROM assignments a
+         LEFT JOIN members m ON m.user_id = a.user_id
+        WHERE a.occurrence_id = ?
+        ORDER BY a.number ASC`,
+    )
     .bind(occurrenceId)
-    .all<{ user_id: string; number: number }>();
-  return results;
+    .all<{ user_id: string; number: number; user_name: string | null; display_name: string | null }>();
+  return results.map((r) => ({
+    user_id: r.user_id,
+    number: r.number,
+    name: r.display_name || r.user_name || r.user_id,
+  }));
 }

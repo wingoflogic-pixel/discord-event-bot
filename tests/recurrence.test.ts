@@ -14,7 +14,7 @@ import type { Notification } from '../src/db/types';
 function makeNotification(over: Partial<Notification>): Notification {
   return {
     id: 1,
-    event_id: 1,
+    guild_id: 'g1',
     segment_id: 1,
     name: 'テスト通知',
     channel_id: 'c1',

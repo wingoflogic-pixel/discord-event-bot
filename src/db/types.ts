@@ -1,18 +1,13 @@
 /**
- * D1 行・ドメイン型（汎用リデザイン: Event ＞ Notification → Segment ＞ Occurrence）。
- * 用語の定義は CONTEXT.md、スキーマは migrations/0002_generic_redesign.sql を参照。
+ * D1 行・ドメイン型（Server[guild_id] ＞ Notification → Segment ＞ Occurrence）。
+ * 用語の定義は CONTEXT.md、スキーマは migrations/0002 + 0003(guild_id) + 0004(Event 廃止) を参照。
+ * 最上位スコープの Server は Discord API（bot の参加サーバー）から取得し DB には永続化しない（ADR 0004）。
  */
-
-/** events: 出欠管理を束ねる最上位グループ */
-export interface Event {
-  id: number;
-  name: string;
-  created_at: string;
-}
 
 /** segments: 設定可能なメンバー区分（キャスト/スタッフ等） */
 export interface Segment {
   id: number;
+  guild_id: string;
   name: string;
   /** @メンション用 Discord ロールID / '@everyone' / null */
   mention_role_id: string | null;
@@ -45,10 +40,10 @@ export interface SegmentMember extends Member {
 
 export type NotificationType = 'recurring' | 'oneoff';
 
-/** notifications: Event 配下の独立トラック */
+/** notifications: Server(guild_id) 配下の独立トラック */
 export interface Notification {
   id: number;
-  event_id: number;
+  guild_id: string;
   segment_id: number;
   name: string;
   channel_id: string;
@@ -57,7 +52,10 @@ export interface Notification {
   rrule: string | null;
   /** oneoff 用 'YYYY/MM/DD' */
   one_off_date: string | null;
-  /** recurring の系列基準日 'YYYY/MM/DD'（主に隔週のパリティ決定用。null可） */
+  /**
+   * recurring の系列基準（隔週パリティ決定用の dtstart 起点・'YYYY/MM/DD'・null可）。
+   * UI では「次回の開催日」候補として提示する（「基準日」表記は廃語・ADR 0007）。
+   */
   anchor_date: string | null;
   /** 'HH:MM'（JST） */
   start_time: string;

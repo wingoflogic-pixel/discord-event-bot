@@ -6,7 +6,7 @@ await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 
 // vitest-pool-workers 0.16 では isolatedStorage が廃止されたため、
 // 各テスト前に全テーブルを空にしてテスト間の独立性を担保する。
-// 汎用リデザイン後の 8 テーブル（events ＞ notifications → segments ＞ occurrences ほか）。
+// Event 廃止後の 7 テーブル（Server[guild_id] ＞ notifications → segments ＞ occurrences ほか）。
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM assignments'),
@@ -16,6 +16,5 @@ beforeEach(async () => {
     env.DB.prepare('DELETE FROM segment_members'),
     env.DB.prepare('DELETE FROM members'),
     env.DB.prepare('DELETE FROM segments'),
-    env.DB.prepare('DELETE FROM events'),
   ]);
 });

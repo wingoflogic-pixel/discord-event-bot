@@ -14,22 +14,18 @@ import type { Notification } from '../src/db/types';
 const db = () => env.DB;
 
 // --- テスト用の最小フィクスチャ ---
-
-/** events に 1 行入れて id を返す */
-async function insertEvent(name = 'イベント'): Promise<number> {
-  const res = await db().prepare('INSERT INTO events (name) VALUES (?)').bind(name).run();
-  return res.meta.last_row_id as number;
-}
+// Event 廃止後、Notification は guild_id で Server に直結する（ADR 0005）。
+const GUILD = 'g1';
 
 /** notifications に 1 行入れて Notification を返す（必要列のみ over で上書き） */
 async function insertNotification(
-  eventId: number,
+  guildId: string,
   segmentId: number,
   over: Partial<Notification> = {},
 ): Promise<Notification> {
   const n: Notification = {
     id: 0,
-    event_id: eventId,
+    guild_id: guildId,
     segment_id: segmentId,
     name: 'テスト通知',
     channel_id: 'c1',
@@ -52,13 +48,13 @@ async function insertNotification(
   const res = await db()
     .prepare(
       `INSERT INTO notifications (
-         event_id, segment_id, name, channel_id, type, rrule, one_off_date, start_time,
+         guild_id, segment_id, name, channel_id, type, rrule, one_off_date, start_time,
          recruit_days_before, remind_start_days, remind_undecided_days,
          quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
-      n.event_id,
+      n.guild_id,
       n.segment_id,
       n.name,
       n.channel_id,
@@ -95,7 +91,7 @@ async function insertOccurrence(
 
 describe('segment members（アクティブ集計）', () => {
   it('getActiveSegmentMembers は status="" のみを返す', async () => {
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
     await addMember(db(), 'u1', 'n1', 'D1');
     await addMember(db(), 'u2', 'n2', 'D2');
     await addMember(db(), 'u3', 'n3', 'D3');
@@ -109,9 +105,8 @@ describe('segment members（アクティブ集計）', () => {
   });
 
   it('getStatusBuckets は区分アクティブメンバーを母集団に集計し休止者を除外・未回答を補完', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id);
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
 
     await addMember(db(), 'u1', 'n1', 'D1');
@@ -137,9 +132,8 @@ describe('segment members（アクティブ集計）', () => {
 
 describe('checkQuotaForNotification', () => {
   it('quota 無効なら空配列', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id, {
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id, {
       quota_enabled: 0,
       quota_interval_days: 30,
     });
@@ -147,9 +141,8 @@ describe('checkQuotaForNotification', () => {
   });
 
   it('最終参加日から interval を超えたアクティブメンバーのみ返す（未参加者は除外）', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id, {
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id, {
       quota_enabled: 1,
       quota_interval_days: 30,
     });
@@ -175,9 +168,8 @@ describe('checkQuotaForNotification', () => {
   });
 
   it('休止メンバーは対象外', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id, {
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id, {
       quota_enabled: 1,
       quota_interval_days: 30,
     });
@@ -202,9 +194,8 @@ describe('assignNumbers（安定割り当て）', () => {
   }
 
   it('参加者全員に 1..N の重複なし番号を振る', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id);
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
     await setupParticipants(occId, ['u1', 'u2', 'u3']);
 
@@ -222,9 +213,8 @@ describe('assignNumbers（安定割り当て）', () => {
   });
 
   it('再実行で既存番号を維持し、新規参加者にのみ空き番号を採番（重複なし）', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id);
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
     await setupParticipants(occId, ['u1', 'u2']);
 
@@ -253,9 +243,8 @@ describe('assignNumbers（安定割り当て）', () => {
   });
 
   it('再実行で参加者が増えていなければ新規採番なし（冪等）', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id);
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
     await setupParticipants(occId, ['u1', 'u2']);
 
@@ -270,9 +259,8 @@ describe('assignNumbers（安定割り当て）', () => {
   });
 
   it('不参加・未定は採番対象外', async () => {
-    const eventId = await insertEvent();
-    const seg = await createSegment(db(), { name: 'キャスト', mention_role_id: null });
-    const n = await insertNotification(eventId, seg.id);
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
     await addMember(db(), 'u1', 'n1', 'D1');
     await addMember(db(), 'u2', 'n2', 'D2');

@@ -1,7 +1,7 @@
 {
   "name": "discord-event-bot",
   "version": "7.0.0",
-  "description": "汎用 Discord イベント出欠 Bot（Cloudflare Workers + D1・管理UI付き）。Event ＞ Notification → Segment ＞ Occurrence モデル。",
+  "description": "汎用 Discord イベント出欠 Bot（Cloudflare Workers + D1・管理UI付き）。マルチサーバー対応・Server ＞ Notification → Segment ＞ Occurrence モデル。",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
