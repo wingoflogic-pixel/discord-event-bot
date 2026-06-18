@@ -32,7 +32,7 @@ describe('buildMentionPrefix（mention_mode・ADR 0010）', () => {
     expect(buildMentionPrefix(seg('r1'), 'members', ['100', '200'])).toBe('<@100> <@200>\n\n');
   });
 
-  it("'members' は2000字未満に収め、超過は「ほかN名」で省略（表示＋省略=全体）", () => {
+  it("'members' は既定予算内に収め、超過は「ほかN名」で省略（表示＋省略=全体）", () => {
     // 18桁スノーフレーク相当のユニークIDを大量に用意（`<@id>` ≒ 22字）。
     const ids = Array.from({ length: 200 }, (_, i) => '1' + String(i).padStart(17, '0'));
     const out = buildMentionPrefix(seg('r1'), 'members', ids);
@@ -42,6 +42,21 @@ describe('buildMentionPrefix（mention_mode・ADR 0010）', () => {
     const shown = (out.match(/<@/g) || []).length;
     expect(shown).toBeGreaterThan(0);
     expect(shown + omitted).toBe(200);
+  });
+
+  it('動的予算で「メンション＋見出し＋本文最大＋日時」の合成が2000字を超えない（ADR 0010 major修正）', () => {
+    // 最悪ケース: 大量メンバー × 見出し100字 × 本文1500字。
+    const ids = Array.from({ length: 300 }, (_, i) => '1' + String(i).padStart(17, '0'));
+    const title = 'あ'.repeat(100);
+    const body = 'い'.repeat(1500);
+    const tail = '日時: **2026/07/05 (日) 22:30〜**';
+    // 呼び出し側の逆算（composeChannelPost と同じロジック）。
+    const restLen = composePost('', title, body, tail).length;
+    const budget = Math.max(0, 2000 - restLen);
+    const prefix = buildMentionPrefix(seg('r1'), 'members', ids, budget);
+    const out = composePost(prefix, title, body, tail);
+    expect(out.length).toBeLessThanOrEqual(2000);
+    expect(prefix).toMatch(/ほか\d+名\n\n$/); // 大半は省略される
   });
 });
 
