@@ -14,31 +14,25 @@ import {
 } from '../db/responses';
 import { getActiveSegmentMembers, getSegment } from '../db/segments';
 import { nextOccurrenceDate } from '../lib/recurrence';
-import { getDaysUntil, getJSTNow } from '../lib/date';
+import { getDaysUntil, getJSTNow, formatOccurrenceLabel } from '../lib/date';
 import {
   sendChannelMessage,
   sendDirectMessageCached,
   createButtonComponents,
+  createStatusAllButton,
   buildMentionPrefix,
 } from '../discord/rest';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const DM_INTERVAL_MS = 300;
 
-/** 'YYYY/MM/DD' の曜日（JST 壁時計）。0=日 → '日' */
-const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
-function weekdayLabel(dateStr: string): string {
-  const [y, m, d] = dateStr.split('/').map(Number);
-  return WEEKDAY_LABELS[new Date(y, m - 1, d).getDay()];
-}
-
 /** スロットの表示時刻（occ.start_time 優先・空なら通知の既定 start_time）。 */
 function slotTime(occ: Occurrence, n: Notification): string {
   return occ.start_time || n.start_time;
 }
-/** 'YYYY/MM/DD (曜) HH:MM~' のスロット表示ラベル。 */
+/** 'YYYY/MM/DD (曜) HH:MM〜HH:MM' のスロット表示ラベル（duration 未設定なら開放端「HH:MM〜」）。 */
 function slotLabel(occ: Occurrence, n: Notification): string {
-  return `${occ.occurrence_date} (${weekdayLabel(occ.occurrence_date)}) ${slotTime(occ, n)}~`;
+  return formatOccurrenceLabel(occ.occurrence_date, slotTime(occ, n), n.duration_minutes);
 }
 
 /** [PRD 4.2.1] 募集 */
@@ -57,7 +51,7 @@ async function sendRecruitment(
     env,
     n.channel_id,
     message,
-    createButtonComponents(occ.id),
+    createButtonComponents(occ.id, n.type),
   );
   console.log(ok ? `✅ [Recruitment] sent (n=${n.id})` : `❌ [Recruitment] failed (n=${n.id})`);
 }
@@ -78,15 +72,17 @@ export async function sendCandidateRecruitment(
   const prefix = segment ? buildMentionPrefix(segment, !!n.mention_enabled) : '';
   const list = occs.map((o, i) => `${i + 1}. **${slotLabel(o, n)}**`).join('\n');
   const header =
-    `${prefix}📅 **イベント候補日の出欠募集!**\n\n` +
-    `下の各候補について、ボタンで回答してください（参加できる候補は複数選べます）。\n\n${list}`;
-  await sendChannelMessage(env, n.channel_id, header);
+    `${prefix}📅 **イベント候補日の調整!**\n\n` +
+    `下の各候補について、ボタンで回答してください（都合のつく候補すべてに「可」を選べます）。\n` +
+    `全体の状況は下の「📊 全候補の状況」ボタンで確認できます。\n\n${list}`;
+  // ヘッダに全候補の状況をまとめて返す集約ボタンを1つ付ける（各候補には状況確認を付けない）。
+  await sendChannelMessage(env, n.channel_id, header, createStatusAllButton(n.id));
   await sleep(DM_INTERVAL_MS);
 
   let sent = 0;
   for (const o of occs) {
-    const msg = `🗓️ **${slotLabel(o, n)}** の出欠`;
-    const ok = await sendChannelMessage(env, n.channel_id, msg, createButtonComponents(o.id));
+    const msg = `🗓️ **${slotLabel(o, n)}** の可否`;
+    const ok = await sendChannelMessage(env, n.channel_id, msg, createButtonComponents(o.id, n.type, false));
     if (ok) sent++;
     else console.error(`❌ [CandidateRecruitment] failed (n=${n.id}, occ=${o.id})`);
     await sleep(DM_INTERVAL_MS); // チャンネル連投のレート制限対策
@@ -107,19 +103,39 @@ export async function recruitNotificationNow(
   const segment = await getSegment(db, n.segment_id);
   if (!segment) return { ok: false, message: `対象の区分 #${n.segment_id} が見つかりません。` };
 
-  if (n.type === 'oneoff' && n.decided_occurrence_id == null) {
+  // 単発: 確定済みは確定回を、未確定は候補回（複数なら一括／1件ならそれ）を募集する。
+  // 確定済みで最早でないスロットを選んだ場合に nextOccurrenceDate(=one_off_date=最早)を掴んで
+  // cancelled スロットで失敗する不具合を避けるため、確定回は id で直接対象にする。
+  if (n.type === 'oneoff') {
+    if (n.decided_occurrence_id != null) {
+      const occ = await getOccurrence(db, n.decided_occurrence_id);
+      if (!occ || occ.status !== 'scheduled') {
+        return { ok: false, message: '確定した開催回が見つかりません（確定解除や削除の可能性）。' };
+      }
+      await sendRecruitment(env, n, occ);
+      return { ok: true, message: `**${occ.occurrence_date}** の募集メッセージを送信しました!` };
+    }
     const candidates = await listScheduledOccurrences(db, n.id);
-    if (candidates.length > 1) {
-      const sent = await sendCandidateRecruitment(env, n, candidates);
+    // 候補回が未生成の旧データは one_off_date から 1 件だけ補完
+    if (candidates.length === 0 && n.one_off_date) {
+      candidates.push(await getOrCreateOccurrence(db, n.id, n.one_off_date, n.start_time));
+    }
+    const live = candidates.filter((o) => o.status === 'scheduled');
+    if (live.length === 0) return { ok: false, message: '募集できる候補日がありません。' };
+    if (live.length > 1) {
+      const sent = await sendCandidateRecruitment(env, n, live);
       return sent > 0
-        ? { ok: true, message: `${candidates.length} 件の候補日について募集メッセージを送信しました!` }
+        ? { ok: true, message: `${live.length} 件の候補日について募集メッセージを送信しました!` }
         : { ok: false, message: '募集メッセージの送信に失敗しました。' };
     }
+    await sendRecruitment(env, n, live[0]);
+    return { ok: true, message: `**${live[0].occurrence_date}** の募集メッセージを送信しました!` };
   }
 
+  // recurring: 次回開催回を 1 件募集
   const target = nextOccurrenceDate(n);
   if (!target) {
-    return { ok: false, message: '次回の開催日を特定できませんでした（rrule / 候補日を確認してください）。' };
+    return { ok: false, message: '次回の開催日を特定できませんでした（rrule を確認してください）。' };
   }
   const occ = await getOrCreateOccurrence(db, n.id, target, n.start_time);
   if (occ.status === 'cancelled') {
@@ -185,7 +201,7 @@ async function sendUnansweredReminder(
       db,
       member,
       message,
-      createButtonComponents(occ.id),
+      createButtonComponents(occ.id, n.type),
     );
     if (ok) sent++;
     else console.error(`❌ [Unanswered] DM failed: ${member.user_name}`);
@@ -233,7 +249,7 @@ async function sendUndecidedReminder(
       db,
       member,
       message,
-      createButtonComponents(occ.id),
+      createButtonComponents(occ.id, n.type),
     );
     if (ok) sent++;
     else console.error(`❌ [Undecided] DM failed: ${member.user_name}`);
@@ -255,9 +271,10 @@ async function remindForOccurrence(
   if (daysUntil >= 0 && daysUntil <= n.remind_start_days) {
     let proceed = true;
     if (daysUntil === 0) {
-      // 当日は開始時刻前のみ（現挙動を踏襲。cron が開始時刻と同時の場合は実質 no-op）
+      // 当日は開始時刻前のみ。スロット固有時刻(slotTime)で判定する（同日複数時刻スロットを正しく扱う）。
+      // cron が開始時刻と同時の場合は実質 no-op。
       const now = getJSTNow();
-      const [h, m] = n.start_time.split(':').map(Number);
+      const [h, m] = slotTime(occ, n).split(':').map(Number);
       proceed = now.getHours() * 60 + now.getMinutes() < h * 60 + m;
     }
     if (proceed) await sendUnansweredReminder(env, n, occ, daysUntil);
@@ -297,46 +314,36 @@ async function processSingleOccurrence(env: Env, n: Notification): Promise<void>
 }
 
 /**
- * 単発・複数候補日。候補回（status='scheduled'）を母集合に、最早候補日が募集日に達したら一括募集、
- * リマインドは候補回ごとに自分の日付で判定する。確定済み(decided_occurrence_id)なら確定回のみ対象。
+ * 単発・複数候補日。募集は管理画面／スラッシュコマンドからの手動送信に一本化したため、cron では
+ * 自動募集を行わない（完全一致ゲートの取りこぼしや手動との二重投稿を避ける）。
+ * cron はリマインドのみを候補回ごとに自分の日付で判定する。確定済み(decided_occurrence_id)なら確定回のみ対象。
  */
 async function processOneoffCandidates(env: Env, n: Notification): Promise<void> {
   const db = env.DB;
 
-  // 対象候補回の決定（確定済みなら確定回のみ）
-  let candidates: Occurrence[];
+  // リマインド対象の決定。単発の出席リマインドは「確定後の確定回のみ」を対象にする
+  //（確定前に複数候補へ当日 DM が乱発するのを防ぐ）。募集は手動送信のため cron では送らない。
+  let target: Occurrence | null = null;
   if (n.decided_occurrence_id != null) {
     const occ = await getOccurrence(db, n.decided_occurrence_id);
-    candidates = occ && occ.status === 'scheduled' ? [occ] : [];
+    target = occ && occ.status === 'scheduled' ? occ : null;
   } else {
-    candidates = await listScheduledOccurrences(db, n.id);
-    // 後方互換: 候補回が未生成なら one_off_date から 1 回だけ生成して扱う
-    if (candidates.length === 0 && n.one_off_date) {
-      candidates = [await getOrCreateOccurrence(db, n.id, n.one_off_date, n.start_time)];
+    const scheduled = await listScheduledOccurrences(db, n.id);
+    if (scheduled.length === 1) {
+      target = scheduled[0]; // 候補が1つだけなら実質確定とみなしてリマインドする
+    } else if (scheduled.length === 0 && n.one_off_date) {
+      // 後方互換: 候補回未生成の旧データは one_off_date を 1 回だけ対象に
+      target = await getOrCreateOccurrence(db, n.id, n.one_off_date, n.start_time);
     }
+    // 複数候補（未確定）はリマインドを保留（確定後に送る）
   }
-  if (candidates.length === 0) {
-    console.log(`[n=${n.id}] oneoff: no candidate occurrences, skip`);
+
+  if (!target || target.status !== 'scheduled') {
+    console.log(`[n=${n.id}] oneoff: リマインド対象なし（未確定の複数候補 / 候補なし）, skip`);
     return;
   }
 
-  // 募集 & ノルマ: 最早候補日が recruit_days_before に達したら実行
-  const earliest = candidates[0]; // listScheduledOccurrences は日付昇順
-  const daysToEarliest = getDaysUntil(earliest.occurrence_date);
-  console.log(`[n=${n.id}] oneoff candidates: ${candidates.length}, earliest in ${daysToEarliest}d`);
-  if (daysToEarliest === n.recruit_days_before) {
-    if (n.decided_occurrence_id == null && candidates.length > 1) {
-      await sendCandidateRecruitment(env, n, candidates);
-    } else {
-      await sendRecruitment(env, n, candidates[0]);
-    }
-    if (n.quota_enabled) await checkQuotaAndNotify(env, n);
-  }
-
-  // リマインドは候補回ごとに自分の日付で判定
-  for (const occ of candidates) {
-    await remindForOccurrence(env, n, occ, getDaysUntil(occ.occurrence_date));
-  }
+  await remindForOccurrence(env, n, target, getDaysUntil(target.occurrence_date));
 }
 
 /**

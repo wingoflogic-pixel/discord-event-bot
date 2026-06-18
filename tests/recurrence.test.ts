@@ -23,6 +23,7 @@ function makeNotification(over: Partial<Notification>): Notification {
     one_off_date: null,
     anchor_date: null,
     start_time: '21:00',
+    duration_minutes: null,
     recruit_days_before: 7,
     remind_start_days: 3,
     remind_undecided_days: 1,

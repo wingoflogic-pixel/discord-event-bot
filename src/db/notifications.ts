@@ -1,11 +1,17 @@
-import type { Notification, NotificationType } from './types';
+import type { Notification, NotificationListItem, NotificationType } from './types';
 import { listOccurrencesForNotification, setOccurrenceStatus } from './occurrences';
 
 const COLS =
   'id, guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time, ' +
-  'recruit_days_before, remind_start_days, remind_undecided_days, ' +
+  'duration_minutes, recruit_days_before, remind_start_days, remind_undecided_days, ' +
   'quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active, ' +
   'decided_occurrence_id, created_at';
+
+/** 一覧表示用の集計列（候補数・確定回の日時）。COLS に続けて付与する。 */
+const LIST_EXTRA =
+  `, (SELECT COUNT(*) FROM occurrences o WHERE o.notification_id = notifications.id AND o.status = 'scheduled') AS candidate_count` +
+  `, (SELECT o.occurrence_date FROM occurrences o WHERE o.id = notifications.decided_occurrence_id) AS decided_date` +
+  `, (SELECT o.start_time FROM occurrences o WHERE o.id = notifications.decided_occurrence_id) AS decided_time`;
 
 /** Notification 作成/更新の入力（数値フラグは 0/1） */
 export interface NotificationInput {
@@ -18,6 +24,7 @@ export interface NotificationInput {
   one_off_date: string | null;
   anchor_date: string | null;
   start_time: string;
+  duration_minutes: number | null;
   recruit_days_before: number;
   remind_start_days: number;
   remind_undecided_days: number;
@@ -28,11 +35,11 @@ export interface NotificationInput {
   active: number;
 }
 
-/** 全 Notification 取得（作成順） */
-export async function listNotifications(db: D1Database): Promise<Notification[]> {
+/** 全 Notification 取得（作成順・一覧用の集計列付き） */
+export async function listNotifications(db: D1Database): Promise<NotificationListItem[]> {
   const { results } = await db
-    .prepare(`SELECT ${COLS} FROM notifications ORDER BY created_at`)
-    .all<Notification>();
+    .prepare(`SELECT ${COLS}${LIST_EXTRA} FROM notifications ORDER BY created_at`)
+    .all<NotificationListItem>();
   return results;
 }
 
@@ -68,15 +75,15 @@ export async function listNotificationsByChannel(
   return results;
 }
 
-/** Server(guild_id) 配下の Notification 一覧 */
+/** Server(guild_id) 配下の Notification 一覧（一覧用の集計列付き） */
 export async function listNotificationsByGuild(
   db: D1Database,
   guildId: string,
-): Promise<Notification[]> {
+): Promise<NotificationListItem[]> {
   const { results } = await db
-    .prepare(`SELECT ${COLS} FROM notifications WHERE guild_id = ? ORDER BY created_at`)
+    .prepare(`SELECT ${COLS}${LIST_EXTRA} FROM notifications WHERE guild_id = ? ORDER BY created_at`)
     .bind(guildId)
-    .all<Notification>();
+    .all<NotificationListItem>();
   return results;
 }
 
@@ -89,9 +96,9 @@ export async function createNotification(
     .prepare(
       `INSERT INTO notifications (
          guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time,
-         recruit_days_before, remind_start_days, remind_undecided_days,
+         duration_minutes, recruit_days_before, remind_start_days, remind_undecided_days,
          quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, active
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       input.guild_id,
@@ -103,6 +110,7 @@ export async function createNotification(
       input.one_off_date ?? null,
       input.anchor_date ?? null,
       input.start_time,
+      input.duration_minutes ?? null,
       input.recruit_days_before,
       input.remind_start_days,
       input.remind_undecided_days,
@@ -128,7 +136,8 @@ export async function updateNotification(
     .prepare(
       `UPDATE notifications SET
          guild_id = ?, segment_id = ?, name = ?, channel_id = ?, type = ?, rrule = ?,
-         one_off_date = ?, anchor_date = ?, start_time = ?, recruit_days_before = ?, remind_start_days = ?,
+         one_off_date = ?, anchor_date = ?, start_time = ?, duration_minutes = ?,
+         recruit_days_before = ?, remind_start_days = ?,
          remind_undecided_days = ?, quota_enabled = ?, quota_interval_days = ?,
          assignment_enabled = ?, mention_enabled = ?, active = ?
        WHERE id = ?`,
@@ -143,6 +152,7 @@ export async function updateNotification(
       patch.one_off_date ?? null,
       patch.anchor_date ?? null,
       patch.start_time,
+      patch.duration_minutes ?? null,
       patch.recruit_days_before,
       patch.remind_start_days,
       patch.remind_undecided_days,

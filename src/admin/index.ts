@@ -34,8 +34,9 @@ import {
 } from '../db/occurrences';
 import { getResponsesForOccurrence, getStatusBuckets, listRecentResponses } from '../db/responses';
 import { getAssignments, assignNumbers } from '../db/assignments';
-import { sendChannelMessage } from '../discord/rest';
+import { sendChannelMessage, createButtonComponents } from '../discord/rest';
 import { recruitNotificationNow } from '../cron/dailyCheck';
+import { formatTimeRange } from '../lib/date';
 import { getSetupStatus, registerCommandsForEnv } from './setup';
 
 function json(body: unknown, status = 200): Response {
@@ -125,6 +126,13 @@ function toNotificationInput(b: Record<string, unknown>): NotificationInput | nu
     one_off_date: b.one_off_date == null || b.one_off_date === '' ? null : String(b.one_off_date),
     anchor_date: b.anchor_date == null || b.anchor_date === '' ? null : String(b.anchor_date),
     start_time: typeof b.start_time === 'string' && b.start_time ? b.start_time : '21:00',
+    duration_minutes:
+      b.duration_minutes == null ||
+      b.duration_minutes === '' ||
+      !Number.isFinite(Number(b.duration_minutes)) ||
+      Number(b.duration_minutes) <= 0
+        ? null
+        : Math.floor(Number(b.duration_minutes)),
     recruit_days_before: num(b.recruit_days_before, 7),
     remind_start_days: num(b.remind_start_days, 3),
     remind_undecided_days: num(b.remind_undecided_days, 1),
@@ -356,7 +364,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const announced = await sendChannelMessage(
         env,
         n.channel_id,
-        `✅ **開催日が確定しました**\n\n**${occ.occurrence_date}** ${occ.start_time || n.start_time}~ に開催します！`,
+        `✅ **開催日が確定しました**\n\n**${occ.occurrence_date}** ${formatTimeRange(occ.start_time || n.start_time, n.duration_minutes)} に開催します！\n\n出欠が変わる場合は下のボタンで回答してください。`,
+        createButtonComponents(occ.id, n.type),
       );
       return json({ ok: true, decided_occurrence_id: occId, announced });
     }

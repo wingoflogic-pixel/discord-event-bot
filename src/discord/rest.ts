@@ -1,5 +1,5 @@
 import type { Env } from '../env';
-import type { Member, EventStatusBuckets, Segment } from '../db/types';
+import type { Member, EventStatusBuckets, NotificationType, Segment } from '../db/types';
 import { setDmChannelId } from '../db/members';
 
 const API = 'https://discord.com/api/v10';
@@ -12,16 +12,47 @@ export function mentionUser(userId: string): string {
   return `<@${userId}>`;
 }
 
-/** 出欠回答ボタン（参加/不参加/未定/状況確認）。custom_id は {action}_{occurrenceId} */
-export function createButtonComponents(occurrenceId: number): unknown[] {
+/** 回答の表示ラベル（保存値・custom_id は不変。単発=日程調整は「可/不可/未確定」表記）。 */
+export interface AnswerLabels {
+  participate: string;
+  absent: string;
+  undecided: string;
+}
+export function answerLabels(type: NotificationType): AnswerLabels {
+  return type === 'oneoff'
+    ? { participate: '可', absent: '不可', undecided: '未確定' }
+    : { participate: '参加', absent: '不参加', undecided: '未定' };
+}
+
+/**
+ * 出欠回答ボタン（可否/状況確認）。custom_id は {action}_{occurrenceId} で固定（保存値も不変）。
+ * type で表示ラベルのみ切替（oneoff=可/不可/未確定）。includeStatus=false で状況確認ボタンを省く
+ * （単発の複数候補は各スロットに状況確認を付けず、ヘッダの集約ボタンへ寄せるため）。
+ */
+export function createButtonComponents(
+  occurrenceId: number,
+  type: NotificationType = 'recurring',
+  includeStatus = true,
+): unknown[] {
+  const L = answerLabels(type);
+  const components: unknown[] = [
+    { type: 2, style: 3, label: L.participate, custom_id: `participate_${occurrenceId}` },
+    { type: 2, style: 4, label: L.absent, custom_id: `absent_${occurrenceId}` },
+    { type: 2, style: 2, label: L.undecided, custom_id: `undecided_${occurrenceId}` },
+  ];
+  if (includeStatus) {
+    components.push({ type: 2, style: 2, label: '📊 状況確認', custom_id: `status_${occurrenceId}` });
+  }
+  return [{ type: 1, components }];
+}
+
+/** 単発の複数候補募集ヘッダ用：全候補の状況をまとめて返す集約ボタン。custom_id は statusall_{notificationId}。 */
+export function createStatusAllButton(notificationId: number): unknown[] {
   return [
     {
-      type: 1, // Action Row
+      type: 1,
       components: [
-        { type: 2, style: 3, label: '参加', custom_id: `participate_${occurrenceId}` },
-        { type: 2, style: 4, label: '不参加', custom_id: `absent_${occurrenceId}` },
-        { type: 2, style: 2, label: '未定', custom_id: `undecided_${occurrenceId}` },
-        { type: 2, style: 2, label: '📊 状況確認', custom_id: `status_${occurrenceId}` },
+        { type: 2, style: 2, label: '📊 全候補の状況', custom_id: `statusall_${notificationId}` },
       ],
     },
   ];
@@ -38,14 +69,23 @@ export function buildMentionPrefix(segment: Segment, enabled: boolean): string {
   return `<@&${segment.mention_role_id}>\n\n`;
 }
 
-/** 状況確認メッセージ（旧 buildStatusMessage） */
-export function buildStatusMessage(targetDate: string, s: EventStatusBuckets): string {
+/**
+ * 状況確認メッセージ。title は日付（または 'YYYY/MM/DD (曜) HH:MM〜' 等の表示ラベル）。
+ * type で見出し・回答ラベルを切替（oneoff=調整状況・可/不可/未確定）。集計バケットのキー自体は不変。
+ */
+export function buildStatusMessage(
+  title: string,
+  s: EventStatusBuckets,
+  type: NotificationType = 'recurring',
+): string {
+  const L = answerLabels(type);
+  const head = type === 'oneoff' ? '調整状況' : '参加状況';
   const fmt = (users: string[]) => (users.length > 0 ? users.join(', ') : '(なし)');
   return (
-    `📅 **${targetDate} の参加状況**\n\n` +
-    `⭕ **参加 (${s.参加.length}名)**\n${fmt(s.参加)}\n\n` +
-    `❌ **不参加 (${s.不参加.length}名)**\n${fmt(s.不参加)}\n\n` +
-    `❓ **未定 (${s.未定.length}名)**\n${fmt(s.未定)}\n\n` +
+    `📅 **${title} の${head}**\n\n` +
+    `⭕ **${L.participate} (${s.参加.length}名)**\n${fmt(s.参加)}\n\n` +
+    `❌ **${L.absent} (${s.不参加.length}名)**\n${fmt(s.不参加)}\n\n` +
+    `❓ **${L.undecided} (${s.未定.length}名)**\n${fmt(s.未定)}\n\n` +
     `⚠️ **未回答 (${s.未回答.length}名)**\n${fmt(s.未回答)}`
   );
 }

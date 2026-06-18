@@ -414,18 +414,38 @@
         return out;
       }
 
+      // 開始時刻＋開催時間(分) を From-To 文字列に（サーバ src/lib/date.ts formatTimeRange と同等）
+      function addMinsToTime(time, minutes) {
+        const [h, m] = (time || '0:0').split(':').map(Number);
+        const total = (h || 0) * 60 + (m || 0) + minutes;
+        const wrapped = ((total % 1440) + 1440) % 1440;
+        const hh = String(Math.floor(wrapped / 60)).padStart(2, '0');
+        const mm = String(wrapped % 60).padStart(2, '0');
+        return { time: `${hh}:${mm}`, nextDay: total >= 1440 || total < 0 };
+      }
+      function fmtTimeRange(start, dur) {
+        if (!dur || dur <= 0) return `${start}〜`;
+        const e = addMinsToTime(start, dur);
+        return `${start}〜${e.nextDay ? '翌' : ''}${e.time}`;
+      }
+      function durValue() {
+        const v = ($('#nDuration') && $('#nDuration').value.trim()) || '';
+        return v === '' ? null : Number(v);
+      }
+
       function scheduleSummary() {
         const t = ($('#nStartTime').value || '21:00');
+        const dur = durValue();
         if ($('#nType').value === 'oneoff') {
           const slots = getOneoffSlots();
           if (!slots.length) return '候補（日付＋時刻）を1つ以上追加してください';
           const days = new Set(slots.map((s) => s.date)).size;
-          return `候補 ${slots.length}枠（${days}日）`;
+          return `候補 ${slots.length}枠（${days}日）` + (dur ? `・各${dur}分` : '');
         }
-        const wd = wdLabel($('#nWeekday').value), mode = $('#nMode').value;
-        if (mode === 'weekly') return `毎週 ${wd}曜日 ${t}〜`;
-        if (mode === 'biweekly') return `隔週 ${wd}曜日 ${t}〜（次回 ${$('#nNext').value || '—'}）`;
-        return `毎月 ${nthLabel($('#nNth').value)} ${wd}曜日 ${t}〜`;
+        const wd = wdLabel($('#nWeekday').value), mode = $('#nMode').value, tr = fmtTimeRange(t, dur);
+        if (mode === 'weekly') return `毎週 ${wd}曜日 ${tr}`;
+        if (mode === 'biweekly') return `隔週 ${wd}曜日 ${tr}（次回 ${$('#nNext').value || '—'}）`;
+        return `毎月 ${nthLabel($('#nNth').value)} ${wd}曜日 ${tr}`;
       }
 
       // ================= 通知 =================
@@ -444,10 +464,18 @@
         const segName = (id) => { const s = segs.find((x) => x.id === id); return s ? s.name : '?'; };
         const chName = (id) => { const c = channels.find((x) => x.id === id); return c ? '#' + c.name : id; };
 
+        const oneoffSched = (n) => {
+          const earliest = `${esc(n.one_off_date || '')}${n.start_time ? ' ' + esc(fmtTimeRange(n.start_time, n.duration_minutes)) : ''}`;
+          if (n.decided_occurrence_id && n.decided_date) {
+            return `単発・確定 ${esc(n.decided_date)}${n.decided_time ? ' ' + esc(fmtTimeRange(n.decided_time, n.duration_minutes)) : ''}`;
+          }
+          if ((n.candidate_count || 0) > 1) return `単発・調整中（候補${n.candidate_count}件・最早 ${earliest}）`;
+          return `単発 ${earliest}`;
+        };
         const rows = notifs.map((n) => {
           const sched = n.type === 'oneoff'
-            ? `単発 ${esc(n.one_off_date || '')}${n.start_time ? ' ' + esc(n.start_time) + '〜' : ''}`
-            : esc(humanRRule(n.rrule, n.start_time));
+            ? oneoffSched(n)
+            : esc(humanRRule(n.rrule, n.start_time, n.duration_minutes));
           return `<div class="listrow">
             <div><div style="font-weight:600">${esc(n.name)}</div>
               <div class="muted" style="font-size:12px;margin-top:2px">
@@ -455,6 +483,7 @@
                 ${sched} ・ ${esc(chName(n.channel_id))}</div></div>
             <div class="actions">
               <span class="pill ${n.active ? 'on' : 'off'}">${n.active ? '有効' : '無効'}</span>
+              <button class="btn sm secondary" data-nrecruit="${n.id}">📣 募集</button>
               <button class="btn sm secondary" data-nedit="${n.id}">編集</button>
               <button class="btn sm ghost" data-nocc="${n.id}">開催回</button>
               <button class="btn sm danger" data-ndel="${n.id}">削除</button>
@@ -473,6 +502,16 @@
         document.querySelectorAll('[data-nocc]').forEach((b) => {
           b.onclick = () => loadOccurrences(Number(b.dataset.nocc));
         });
+        document.querySelectorAll('[data-nrecruit]').forEach((b) => {
+          b.onclick = async () => {
+            if (!(await confirmDialog('この通知の募集メッセージをチャンネルへ投稿します。', { okLabel: '送信する' }))) return;
+            await withBusy(b, async () => {
+              try { const r = await api('/notifications/' + b.dataset.nrecruit + '/recruit', { method: 'POST' });
+                toast(r && r.message ? r.message : '募集を送信しました'); }
+              catch (e) { toast(e.message, true); }
+            });
+          };
+        });
         document.querySelectorAll('[data-ndel]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この通知を、配下の開催回・回答ごとすべて削除します。元に戻せません。', { danger: true, okLabel: '削除' }))) return;
@@ -482,12 +521,12 @@
         });
       }
 
-      function humanRRule(rrule, time) {
+      function humanRRule(rrule, time, dur) {
         const b = parseRRuleToBuilder(rrule);
-        const wd = wdLabel(b.byday), t = time || '';
-        if (b.mode === 'weekly') return `毎週 ${wd}曜日 ${t}〜`;
-        if (b.mode === 'biweekly') return `隔週 ${wd}曜日 ${t}〜`;
-        return `毎月 ${nthLabel(b.nth)} ${wd}曜日 ${t}〜`;
+        const wd = wdLabel(b.byday), tr = fmtTimeRange(time || '', dur);
+        if (b.mode === 'weekly') return `毎週 ${wd}曜日 ${tr}`;
+        if (b.mode === 'biweekly') return `隔週 ${wd}曜日 ${tr}`;
+        return `毎月 ${nthLabel(b.nth)} ${wd}曜日 ${tr}`;
       }
 
       function notifForm() {
@@ -505,11 +544,13 @@
           </div>
           <div class="row">
             <div><label>対象区分（メンバー区分）</label><select id="nSegment">${segOpts}</select></div>
-            <div><label>開始時刻</label><input id="nStartTime" type="time" value="21:00" /></div>
+            <div><label>開催時間（分）<span class="muted">（任意・空欄で開始時刻のみ表示）</span></label>
+              <input id="nDuration" type="number" min="0" placeholder="例: 120（2時間）" /></div>
           </div>
           <label>種別</label>
           <select id="nType"><option value="recurring">繰り返し</option><option value="oneoff">単発</option></select>
           <div id="nRecurBox">
+            <div style="max-width:280px"><label>開始時刻</label><input id="nStartTime" type="time" value="21:00" /></div>
             <div class="row3">
               <div><label>繰り返し</label><select id="nMode">
                 <option value="weekly">毎週</option><option value="biweekly">隔週</option><option value="monthly">毎月第N曜</option>
@@ -528,9 +569,11 @@
           </div>
           <div class="summary">📅 <span id="nSummary">—</span></div>
           <div class="row">
-            <div><label>開始 N 日前に募集を投稿</label><input id="nRecruit" type="number" value="7" /></div>
+            <div id="nRecruitBox"><label>開始 N 日前に募集を投稿</label><input id="nRecruit" type="number" value="7" /></div>
             <div><label>N 日前から未回答者へリマインド</label><input id="nRemindStart" type="number" value="3" /></div>
           </div>
+          <p id="nOneoffRecruitNote" class="muted hidden" style="font-size:12px;margin-top:6px">
+            単発は自動募集しません。各通知の「📣 募集」ボタン（通知一覧／開催回）から好きなタイミングで送信できます。</p>
           <div class="actions" style="margin-top:12px">
             <label class="inline"><input type="checkbox" id="nQuota" /> ノルマ</label>
             <label class="inline"><input type="checkbox" id="nAssignment" /> 番号割り当て</label>
@@ -558,12 +601,15 @@
         $('#nNthBox').classList.toggle('hidden', !(t === 'recurring' && mode === 'monthly'));
         $('#nNextBox').classList.toggle('hidden', !(t === 'recurring' && mode === 'biweekly'));
         $('#nQuotaBox').classList.toggle('hidden', !$('#nQuota').checked);
+        // 単発は手動募集のため「開始N日前に募集」を隠し、代わりに注記を出す
+        $('#nRecruitBox').classList.toggle('hidden', t === 'oneoff');
+        $('#nOneoffRecruitNote').classList.toggle('hidden', t !== 'oneoff');
         $('#nSummary').textContent = scheduleSummary();
       }
       function bindNotifForm() {
         refreshNextOptions();
         renderOneoffSlots([]);
-        ['nType', 'nMode', 'nNth', 'nStartTime', 'nNext'].forEach((id) => { $('#' + id).onchange = syncNotifUI; });
+        ['nType', 'nMode', 'nNth', 'nStartTime', 'nNext', 'nDuration'].forEach((id) => { $('#' + id).onchange = syncNotifUI; });
         $('#nWeekday').onchange = () => { refreshNextOptions(); syncNotifUI(); };
         $('#nQuota').onchange = syncNotifUI;
         $('#nOneoffAdd').onclick = addOneoffGroup;
@@ -575,7 +621,7 @@
         $('#nId').value = ''; $('#nFormTitle').textContent = '新規通知'; $('#nReset').classList.add('hidden');
         $('#nName').value = ''; $('#nType').value = 'recurring'; $('#nMode').value = 'weekly';
         $('#nWeekday').value = 'SA'; $('#nNth').value = '2'; renderOneoffSlots([]);
-        $('#nStartTime').value = '21:00'; $('#nRecruit').value = '7'; $('#nRemindStart').value = '3';
+        $('#nStartTime').value = '21:00'; $('#nDuration').value = ''; $('#nRecruit').value = '7'; $('#nRemindStart').value = '3';
         $('#nQuotaInterval').value = '';
         $('#nQuota').checked = false; $('#nAssignment').checked = false; $('#nMention').checked = true; $('#nActive').checked = true;
         refreshNextOptions(); syncNotifUI();
@@ -616,6 +662,7 @@
         $('#nMode').value = b.mode; $('#nWeekday').value = b.byday; $('#nNth').value = String(b.nth);
         renderOneoffSlots(n.type === 'oneoff' ? oneoffGroups : []);
         $('#nStartTime').value = n.start_time || '21:00';
+        $('#nDuration').value = n.duration_minutes == null ? '' : n.duration_minutes;
         $('#nRecruit').value = n.recruit_days_before; $('#nRemindStart').value = n.remind_start_days;
         $('#nQuotaInterval').value = n.quota_interval_days == null ? '' : n.quota_interval_days;
         $('#nQuota').checked = !!n.quota_enabled; $('#nAssignment').checked = !!n.assignment_enabled;
@@ -639,6 +686,7 @@
           candidate_slots: type === 'oneoff' ? slots : undefined,
           anchor_date: type === 'recurring' && $('#nMode').value === 'biweekly' ? ($('#nNext').value || null) : null,
           start_time: $('#nStartTime').value.trim() || '21:00',
+          duration_minutes: durValue(),
           recruit_days_before: Number($('#nRecruit').value),
           remind_start_days: Number($('#nRemindStart').value),
           remind_undecided_days: 1,
@@ -679,10 +727,10 @@
         const [y, m, d] = (dateStr || '').split('/').map(Number);
         return (y && m && d) ? JADOW[new Date(y, m - 1, d).getDay()] : '';
       }
-      /** 開催回の表示ラベル '2026/06/18 (木) 21:00' */
-      function occLabel(o) {
+      /** 開催回の表示ラベル '2026/06/18 (木) 21:00〜23:00'（dur 未指定なら開始時刻のみ） */
+      function occLabel(o, dur) {
         const w = jaDow(o.occurrence_date);
-        return `${o.occurrence_date}${w ? ` (${w})` : ''}${o.start_time ? ' ' + o.start_time : ''}`;
+        return `${o.occurrence_date}${w ? ` (${w})` : ''}${o.start_time ? ' ' + fmtTimeRange(o.start_time, dur) : ''}`;
       }
       async function loadOccurrences(notifId) {
         const n = cacheNotifs.find((x) => x.id === notifId);
@@ -699,7 +747,7 @@
           const undecideBtn = decided
             ? `<button class="btn sm ghost" data-undecide="${notifId}">確定解除</button>` : '';
           return `<div class="pickrow">
-            <div>${esc(occLabel(o))} <span class="pill ${pillCls}">${label}</span>
+            <div>${esc(occLabel(o, n && n.duration_minutes))} <span class="pill ${pillCls}">${label}</span>
               <br><span class="muted" id="tally-${o.id}" style="font-size:12px">集計中…</span></div>
             <div class="actions">${decideBtn}${undecideBtn}
               <button class="btn sm secondary" data-occ="${o.id}">番号割り当て</button></div></div>`;

@@ -59,6 +59,11 @@ export interface Notification {
   anchor_date: string | null;
   /** 'HH:MM'（JST） */
   start_time: string;
+  /**
+   * 開催時間（分）。From-To 表示用。null / 0 以下=未設定で開始時刻のみ「HH:MM〜」表示。
+   * 候補スロット共通の長さ（同一イベントの代替開始時刻のため）。
+   */
+  duration_minutes: number | null;
   recruit_days_before: number;
   remind_start_days: number;
   remind_undecided_days: number;
@@ -77,6 +82,16 @@ export interface Notification {
    */
   decided_occurrence_id: number | null;
   created_at: string;
+}
+
+/** 通知一覧表示用に集計列を付与した行（候補数・確定回の日時）。一覧クエリのみで返す。 */
+export interface NotificationListItem extends Notification {
+  /** status='scheduled' の occurrences 件数（単発の候補数。確定後は1） */
+  candidate_count: number;
+  /** decided_occurrence_id の開催日（未確定は null） */
+  decided_date: string | null;
+  /** decided_occurrence_id の開始時刻（未確定は null） */
+  decided_time: string | null;
 }
 
 export type OccurrenceStatus = 'scheduled' | 'cancelled';

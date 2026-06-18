@@ -3,7 +3,7 @@ import type { Env } from '../env';
 import type { Notification } from '../db/types';
 import { ensureMember, updateMemberDisplayName, getAllMembers } from '../db/members';
 import { getNotification, listNotificationsByChannel } from '../db/notifications';
-import { getOccurrence, getLatestScheduledOccurrence } from '../db/occurrences';
+import { getOccurrence, getLatestScheduledOccurrence, listScheduledOccurrences } from '../db/occurrences';
 import {
   getSegment,
   addSegmentMember,
@@ -13,7 +13,8 @@ import {
 } from '../db/segments';
 import { upsertResponse, getStatusBuckets } from '../db/responses';
 import { assignNumbers } from '../db/assignments';
-import { sendChannelMessage, buildStatusMessage } from '../discord/rest';
+import { sendChannelMessage, buildStatusMessage, answerLabels } from '../discord/rest';
+import { formatOccurrenceLabel } from '../lib/date';
 import { recruitNotificationNow } from '../cron/dailyCheck';
 
 const EPHEMERAL = 64;
@@ -317,7 +318,29 @@ async function handleButton(
   const occurrenceId = sep >= 0 ? Number(customId.slice(sep + 1)) : NaN;
   if (!Number.isInteger(occurrenceId)) return ephemeral('❌ 不正なインタラクションです');
 
-  // 状況確認
+  // 全候補の状況（単発の集約ボタン）: 末尾の数値は notificationId
+  if (action === 'statusall') {
+    try {
+      const n = await getNotification(db, occurrenceId);
+      if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
+      const occs = await listScheduledOccurrences(db, n.id);
+      if (occs.length === 0) return ephemeral('まだ集計できる候補がありません。');
+      const L = answerLabels(n.type);
+      let msg = `📊 **${n.name} の候補別 状況**\n`;
+      for (const o of occs) {
+        const b = await getStatusBuckets(db, o.id, n.segment_id);
+        msg +=
+          `\n🗓️ **${formatOccurrenceLabel(o.occurrence_date, o.start_time || n.start_time, n.duration_minutes)}**\n` +
+          `　${L.participate} ${b.参加.length} / ${L.absent} ${b.不参加.length} / ${L.undecided} ${b.未定.length} / 未回答 ${b.未回答.length}`;
+      }
+      return ephemeral(msg);
+    } catch (e) {
+      console.error('[Button] statusall error:', (e as Error).message);
+      return ephemeral('❌ 状況確認に失敗しました。');
+    }
+  }
+
+  // 状況確認（1スロット）
   if (action === 'status') {
     try {
       const occ = await getOccurrence(db, occurrenceId);
@@ -325,7 +348,8 @@ async function handleButton(
       const n = await getNotification(db, occ.notification_id);
       if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
       const buckets = await getStatusBuckets(db, occ.id, n.segment_id);
-      return ephemeral(buildStatusMessage(occ.occurrence_date, buckets));
+      const title = formatOccurrenceLabel(occ.occurrence_date, occ.start_time || n.start_time, n.duration_minutes);
+      return ephemeral(buildStatusMessage(title, buckets, n.type));
     } catch (e) {
       console.error('[Button] status error:', (e as Error).message);
       return ephemeral('❌ 状況確認に失敗しました。');
