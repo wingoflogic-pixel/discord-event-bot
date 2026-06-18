@@ -13,6 +13,7 @@ import {
   checkQuotaForNotification,
 } from '../db/responses';
 import { getActiveSegmentMembers, getSegment } from '../db/segments';
+import { syncSegmentFromRole } from '../discord/syncSegment';
 import { nextOccurrenceDate } from '../lib/recurrence';
 import { getDaysUntil, getJSTNow, formatOccurrenceLabel } from '../lib/date';
 import {
@@ -355,6 +356,19 @@ export async function mainDailyCheck(env: Env): Promise<void> {
   console.log('=== mainDailyCheck START ===');
   const notifications = await listActiveNotifications(env.DB);
   console.log(`Active notifications: ${notifications.length}`);
+
+  // ロール管理区分を Discord ロールから同期してから処理する（ADR 0009）。
+  // 有効通知が参照する区分のみ。cron は無人化/取得失敗をスキップ（allowEmpty=false）。
+  const segmentIds = [...new Set(notifications.map((n) => n.segment_id))];
+  for (const segId of segmentIds) {
+    const seg = await getSegment(env.DB, segId);
+    if (seg && seg.mention_role_id) {
+      const r = await syncSegmentFromRole(env, seg, { allowEmpty: false });
+      console.log(
+        `[SegmentSync] seg=${segId} ${r.ok ? `+${r.added}/-${r.removed} (=${r.total})` : 'skip: ' + r.message}`,
+      );
+    }
+  }
 
   for (const n of notifications) {
     if (n.type === 'oneoff') {

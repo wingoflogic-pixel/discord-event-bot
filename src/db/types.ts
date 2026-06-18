@@ -9,8 +9,10 @@ export interface Segment {
   id: number;
   guild_id: string;
   name: string;
-  /** @メンション用 Discord ロールID / '@everyone' / null */
+  /** @メンション用 Discord ロールID / '@everyone' / null。設定時は「ロール管理区分」のメンバー源も兼ねる（ADR 0009） */
   mention_role_id: string | null;
+  /** ロール管理区分のメンバーを Discord ロールから同期した最終時刻。null=未同期/手動区分（ADR 0009） */
+  members_synced_at: string | null;
   created_at: string;
 }
 

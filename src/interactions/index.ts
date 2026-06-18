@@ -39,7 +39,7 @@ interface DiscordInteraction {
   };
   guild_id?: string;
   channel_id?: string;
-  member?: { user?: DiscordUser; nick?: string };
+  member?: { user?: DiscordUser; nick?: string; roles?: string[] };
   user?: DiscordUser;
 }
 
@@ -366,12 +366,22 @@ async function handleButton(
     const n = await getNotification(db, occ.notification_id);
     if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
 
+    // ロール管理区分は、押下者が当該ロールを保有する場合のみ回答可（@everyone は全員可・ADR 0009）。
+    // member.roles は interaction に同梱されるため追加の Discord API は不要。
+    const segment = await getSegment(db, n.segment_id);
+    if (segment && segment.mention_role_id && segment.mention_role_id !== '@everyone') {
+      const userRoles = interaction.member?.roles ?? [];
+      if (!userRoles.includes(segment.mention_role_id)) {
+        return ephemeral('🚫 この区分の対象（指定ロールの保有者）ではないため、回答できません。');
+      }
+    }
+
     // メンバーマスタへ自動登録（無ければ）
     await ensureMember(db, userId, userName, displayName).catch((e) =>
       console.error('[Button] ensureMember failed:', (e as Error).message),
     );
 
-    // 区分への自動所属（既存なら no-op、status は維持）
+    // 区分への自動所属（既存なら no-op、status は維持）。ロール管理区分でも保有者なら整合する。
     await addSegmentMember(db, n.segment_id, userId);
 
     // 休止中なら回答拒否
