@@ -1,7 +1,7 @@
 {
-  "name": "choiemu-event-bot",
-  "version": "6.0.0",
-  "description": "Discord Event Master Bot - Cloudflare Workers + D1 implementation with admin UI",
+  "name": "discord-event-bot",
+  "version": "7.0.0",
+  "description": "汎用 Discord イベント出欠 Bot（Cloudflare Workers + D1・管理UI付き）。マルチサーバー対応・Server ＞ Notification → Segment ＞ Occurrence モデル。",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
@@ -16,7 +16,8 @@
     "migrate-from-sheets": "node scripts/migrate-from-sheets.mjs"
   },
   "dependencies": {
-    "discord-interactions": "^4.1.0"
+    "discord-interactions": "^4.1.0",
+    "rrule": "^2.8.1"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.16",

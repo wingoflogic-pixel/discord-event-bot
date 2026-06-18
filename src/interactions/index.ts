@@ -1,20 +1,21 @@
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
 import type { Env } from '../env';
-import { getAllConfig } from '../db/config';
+import type { Notification } from '../db/types';
+import { ensureMember, updateMemberDisplayName, getAllMembers } from '../db/members';
+import { getNotification, listNotificationsByChannel } from '../db/notifications';
+import { getOccurrence, getLatestScheduledOccurrence, listScheduledOccurrences } from '../db/occurrences';
 import {
-  getAllMembers,
-  getMember,
-  setMemberStatus,
-  addMember,
-  updateMemberDisplayName,
-} from '../db/members';
-import { upsertEventLog, getEventStatus } from '../db/eventLog';
-import {
-  sendChannelMessage,
-  createButtonComponents,
-  buildStatusMessage,
-} from '../discord/rest';
-import { getTargetDate, formatDate } from '../lib/date';
+  getSegment,
+  addSegmentMember,
+  listSegmentMembers,
+  listSegmentsForMember,
+  setSegmentMemberStatus,
+} from '../db/segments';
+import { upsertResponse, getStatusBuckets } from '../db/responses';
+import { assignNumbers } from '../db/assignments';
+import { sendChannelMessage, buildStatusMessage, answerLabels } from '../discord/rest';
+import { formatOccurrenceLabel } from '../lib/date';
+import { recruitNotificationNow } from '../cron/dailyCheck';
 
 const EPHEMERAL = 64;
 
@@ -29,12 +30,14 @@ interface DiscordInteraction {
   data?: {
     name?: string;
     custom_id?: string;
-    options?: { name: string; value: string; type: number }[];
+    options?: { name: string; value: string | number; type: number }[];
     resolved?: {
       users?: Record<string, DiscordUser>;
       members?: Record<string, { nick?: string }>;
     };
   };
+  guild_id?: string;
+  channel_id?: string;
   member?: { user?: DiscordUser; nick?: string };
   user?: DiscordUser;
 }
@@ -60,6 +63,14 @@ const STATUS_MAP: Record<string, string> = {
   absent: '不参加',
   undecided: '未定',
 };
+
+/** スラッシュコマンドの option を名前で引く */
+function getOption(
+  interaction: DiscordInteraction,
+  name: string,
+): { name: string; value: string | number; type: number } | undefined {
+  return interaction.data?.options?.find((o) => o.name === name);
+}
 
 /** POST /interactions のエントリ */
 export async function handleInteraction(
@@ -107,75 +118,32 @@ async function handleCommand(
   const db = env.DB;
   const name = interaction.data?.name;
 
-  const resolvedTarget = (): { id: string; name: string } => {
-    const id = interaction.data?.options?.[0]?.value as string;
+  // user option（pause/resume の対象 User）を解決
+  const resolveUserOption = (): { id: string; name: string } | null => {
+    const opt = getOption(interaction, 'user');
+    if (!opt) return null;
+    const id = String(opt.value);
     const u = interaction.data?.resolved?.users?.[id];
     return { id, name: u?.global_name || u?.username || id };
   };
 
   try {
     switch (name) {
-      case 'recruit': {
-        const config = await getAllConfig(db);
-        const targetDate = getTargetDate({
-          eventDayOfWeek: config.Event_DayOfWeek,
-          eventStartTime: config.Event_StartTime,
-        });
-        const targetDateStr = formatDate(targetDate);
-        const message =
-          `📅 **イベント募集開始!**\n\n` +
-          `日時: **${targetDateStr} (${config.Event_DayOfWeek}) ${config.Event_StartTime}~**\n\n` +
-          `参加状況を下のボタンで回答してください!`;
-        await sendChannelMessage(env, message, createButtonComponents(targetDateStr));
-        return ephemeral(`✅ **${targetDateStr}** の募集メッセージを送信しました!`);
-      }
+      case 'recruit':
+        return await handleRecruit(interaction, env);
 
-      case 'pause': {
-        const t = resolvedTarget();
-        const found = await setMemberStatus(db, t.id, '休止中');
-        return ephemeral(
-          found
-            ? `⏸️ **${t.name}** を休止中に設定しました。`
-            : `❌ **${t.name}** はメンバーに登録されていません。`,
-        );
-      }
+      case 'assign':
+        return await handleAssign(interaction, env);
 
+      case 'pause':
       case 'resume': {
-        const t = resolvedTarget();
-        const found = await setMemberStatus(db, t.id, '');
-        return ephemeral(
-          found
-            ? `▶️ **${t.name}** の休止中を解除しました。`
-            : `❌ **${t.name}** はメンバーに登録されていません。`,
-        );
+        const target = resolveUserOption();
+        if (!target) return ephemeral('❌ 対象ユーザーを指定してください。');
+        return await handlePauseResume(db, interaction, target, name === 'pause');
       }
 
-      case 'members': {
-        const members = await getAllMembers(db);
-        if (members.length === 0) return ephemeral('📋 登録メンバーはいません。');
-        let message = `📋 **メンバー一覧 (${members.length}名)**\n\n`;
-        for (const m of members) {
-          const icon = m.status ? '⏸️' : '🟢';
-          const statusText = m.status || 'アクティブ';
-          const name = m.display_name || m.user_name || m.user_id;
-          message += `${icon} **${name}** (${m.user_name ?? ''}) - ${statusText}\n`;
-        }
-        return ephemeral(message);
-      }
-
-      case 'addmember': {
-        const id = interaction.data?.options?.[0]?.value as string;
-        const u = interaction.data?.resolved?.users?.[id];
-        const userName = u?.username || '';
-        const displayName =
-          interaction.data?.resolved?.members?.[id]?.nick || u?.global_name || userName;
-        const result = await addMember(db, id, userName, displayName);
-        return ephemeral(
-          result === 'exists'
-            ? `⚠️ **${displayName}** は既に登録されています。`
-            : `✅ **${displayName}** (${userName}) をメンバーに追加しました!`,
-        );
-      }
+      case 'members':
+        return await handleMembers(db, interaction);
 
       default:
         return ephemeral('❌ 不明なコマンドです');
@@ -184,6 +152,150 @@ async function handleCommand(
     console.error(`[Command] /${name} error:`, (e as Error).message);
     return ephemeral('❌ 処理に失敗しました。管理者に連絡してください。');
   }
+}
+
+/** チャンネルから Notification を解決（1チャンネル1通知前提） */
+async function resolveNotification(
+  db: D1Database,
+  interaction: DiscordInteraction,
+): Promise<Notification | InteractionResponse> {
+  const channelId = interaction.channel_id;
+  if (!channelId) return ephemeral('❌ チャンネルを特定できません。');
+  const list = await listNotificationsByChannel(db, channelId);
+  if (list.length === 0) return ephemeral('❌ このチャンネルに紐づく通知がありません。');
+  if (list.length > 1) return ephemeral('❌ このチャンネルに複数の通知が紐づいています。管理UIで整理してください。');
+  return list[0];
+}
+
+function isEphemeralResponse(v: unknown): v is InteractionResponse {
+  // InteractionResponse.type は数値（InteractionResponseType）。Notification.type は
+  // 'recurring'|'oneoff' の文字列なので、両者とも 'type' を持つ。数値型で確実に弁別する。
+  return typeof v === 'object' && v !== null && typeof (v as { type?: unknown }).type === 'number';
+}
+
+/** /recruit — チャンネルの Notification を解決し、単発・複数候補日にも対応して募集投稿 */
+async function handleRecruit(
+  interaction: DiscordInteraction,
+  env: Env,
+): Promise<InteractionResponse> {
+  const resolved = await resolveNotification(env.DB, interaction);
+  if (isEphemeralResponse(resolved)) return resolved;
+  const r = await recruitNotificationNow(env, resolved);
+  return ephemeral((r.ok ? '✅ ' : '❌ ') + r.message);
+}
+
+/** /assign notification_id — 最新の予定回に assignNumbers し、結果を公開投稿＋実行者へ要約 */
+async function handleAssign(
+  interaction: DiscordInteraction,
+  env: Env,
+): Promise<InteractionResponse> {
+  const db = env.DB;
+  const resolved = await resolveNotification(db, interaction);
+  if (isEphemeralResponse(resolved)) return resolved;
+  const n = resolved;
+
+  const occ = await getLatestScheduledOccurrence(db, n.id);
+  if (!occ) return ephemeral('❌ 割り当て対象の開催回（予定）がありません。');
+
+  const { assigned, all } = await assignNumbers(db, occ.id);
+
+  // 結果一覧を Notification のチャンネルへ公開投稿（投稿可否を実行者に伝える）
+  let postNote = '';
+  if (all.length > 0) {
+    let message = `🎲 **割り当て結果** (${occ.occurrence_date})\n\n`;
+    message += all.map((a) => `#${a.number} ${a.name}`).join('\n');
+    const posted = await sendChannelMessage(env, n.channel_id, message);
+    if (!posted) {
+      postNote = '\n⚠️ ただし結果のチャンネル投稿に失敗しました（Bot権限・channel_id を確認してください）。';
+    }
+  } else {
+    postNote = '\n（参加者がいないため公開投稿はありません）';
+  }
+
+  // 実行者へは ephemeral で要約
+  return ephemeral(
+    `✅ **${occ.occurrence_date}** の番号割り当てを実行しました。\n` +
+      `新規: ${assigned.length}名 / 合計: ${all.length}名` +
+      postNote,
+  );
+}
+
+/** /pause /resume — segment 指定 or 所属から自動選択して休止/解除 */
+async function handlePauseResume(
+  db: D1Database,
+  interaction: DiscordInteraction,
+  target: { id: string; name: string },
+  pause: boolean,
+): Promise<InteractionResponse> {
+  const segOpt = getOption(interaction, 'segment_id');
+  let segmentId: number;
+
+  if (segOpt !== undefined) {
+    segmentId = Number(segOpt.value);
+    if (!Number.isInteger(segmentId)) return ephemeral('❌ segment_id が不正です。');
+  } else {
+    // 未指定: 所属区分が 1 つならそれ、複数なら区分指定を促す、0 なら未所属
+    const segments = await listSegmentsForMember(db, target.id);
+    if (segments.length === 0) {
+      return ephemeral(`❌ **${target.name}** はどの区分にも所属していません。`);
+    }
+    if (segments.length > 1) {
+      const list = segments.map((s) => `- #${s.id} ${s.name}`).join('\n');
+      return ephemeral(
+        `⚠️ **${target.name}** は複数の区分に所属しています。\`segment_id\` を指定してください。\n\n${list}`,
+      );
+    }
+    segmentId = segments[0].id;
+  }
+
+  const status = pause ? '休止中' : '';
+  const found = await setSegmentMemberStatus(db, segmentId, target.id, status);
+  if (!found) {
+    return ephemeral(`❌ **${target.name}** は区分 #${segmentId} に所属していません。`);
+  }
+  return pause
+    ? ephemeral(`⏸️ **${target.name}** を区分 #${segmentId} で休止中に設定しました。`)
+    : ephemeral(`▶️ **${target.name}** の区分 #${segmentId} の休止中を解除しました。`);
+}
+
+/** /members — segment 指定で区分メンバー一覧、未指定で全メンバー一覧（所属区分付き） */
+async function handleMembers(
+  db: D1Database,
+  interaction: DiscordInteraction,
+): Promise<InteractionResponse> {
+  const segOpt = getOption(interaction, 'segment_id');
+
+  if (segOpt !== undefined) {
+    const segmentId = Number(segOpt.value);
+    if (!Number.isInteger(segmentId)) return ephemeral('❌ segment_id が不正です。');
+    const segment = await getSegment(db, segmentId);
+    if (!segment) return ephemeral(`❌ 区分 #${segmentId} が見つかりません。`);
+
+    const members = await listSegmentMembers(db, segmentId);
+    if (members.length === 0) return ephemeral(`📋 区分 **${segment.name}** にメンバーはいません。`);
+
+    let message = `📋 **${segment.name} のメンバー (${members.length}名)**\n\n`;
+    for (const m of members) {
+      const icon = m.status ? '⏸️' : '🟢';
+      const statusText = m.status || 'アクティブ';
+      const name = m.display_name || m.user_name || m.user_id;
+      message += `${icon} **${name}** (${m.user_name ?? ''}) - ${statusText}\n`;
+    }
+    return ephemeral(message);
+  }
+
+  // 未指定: 全メンバー一覧（所属区分も表示）
+  const members = await getAllMembers(db);
+  if (members.length === 0) return ephemeral('📋 登録メンバーはいません。');
+
+  let message = `📋 **全メンバー一覧 (${members.length}名)**\n\n`;
+  for (const m of members) {
+    const segments = await listSegmentsForMember(db, m.user_id);
+    const name = m.display_name || m.user_name || m.user_id;
+    const segText = segments.length > 0 ? segments.map((s) => s.name).join(', ') : '(所属なし)';
+    message += `🟢 **${name}** (${m.user_name ?? ''}) - ${segText}\n`;
+  }
+  return ephemeral(message);
 }
 
 async function handleButton(
@@ -200,16 +312,44 @@ async function handleButton(
   const userName = user.username ?? '';
   const displayName = interaction.member?.nick || user.global_name || userName;
 
-  // custom_id 形式: {action}_{YYYY/MM/DD}
-  const parts = customId.split('_');
-  const action = parts[0];
-  const eventDate = parts.slice(1).join('_');
+  // custom_id 形式: {action}_{occurrenceId}
+  const sep = customId.lastIndexOf('_');
+  const action = sep >= 0 ? customId.slice(0, sep) : customId;
+  const occurrenceId = sep >= 0 ? Number(customId.slice(sep + 1)) : NaN;
+  if (!Number.isInteger(occurrenceId)) return ephemeral('❌ 不正なインタラクションです');
 
-  // 状況確認
+  // 全候補の状況（単発の集約ボタン）: 末尾の数値は notificationId
+  if (action === 'statusall') {
+    try {
+      const n = await getNotification(db, occurrenceId);
+      if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
+      const occs = await listScheduledOccurrences(db, n.id);
+      if (occs.length === 0) return ephemeral('まだ集計できる候補がありません。');
+      const L = answerLabels(n.type);
+      let msg = `📊 **${n.name} の候補別 状況**\n`;
+      for (const o of occs) {
+        const b = await getStatusBuckets(db, o.id, n.segment_id);
+        msg +=
+          `\n🗓️ **${formatOccurrenceLabel(o.occurrence_date, o.start_time || n.start_time, n.duration_minutes)}**\n` +
+          `　${L.participate} ${b.参加.length} / ${L.absent} ${b.不参加.length} / ${L.undecided} ${b.未定.length} / 未回答 ${b.未回答.length}`;
+      }
+      return ephemeral(msg);
+    } catch (e) {
+      console.error('[Button] statusall error:', (e as Error).message);
+      return ephemeral('❌ 状況確認に失敗しました。');
+    }
+  }
+
+  // 状況確認（1スロット）
   if (action === 'status') {
     try {
-      const statusData = await getEventStatus(db, eventDate);
-      return ephemeral(buildStatusMessage(eventDate, statusData));
+      const occ = await getOccurrence(db, occurrenceId);
+      if (!occ) return ephemeral('❌ 対象の開催回が見つかりません。');
+      const n = await getNotification(db, occ.notification_id);
+      if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
+      const buckets = await getStatusBuckets(db, occ.id, n.segment_id);
+      const title = formatOccurrenceLabel(occ.occurrence_date, occ.start_time || n.start_time, n.duration_minutes);
+      return ephemeral(buildStatusMessage(title, buckets, n.type));
     } catch (e) {
       console.error('[Button] status error:', (e as Error).message);
       return ephemeral('❌ 状況確認に失敗しました。');
@@ -219,27 +359,30 @@ async function handleButton(
   const status = STATUS_MAP[action];
   if (!status) return ephemeral('❌ 不明なアクションです');
 
-  // 休止中メンバーは回答不可。未登録は自動登録。
   try {
-    const member = await getMember(db, userId);
-    if (member) {
-      if (member.status) {
-        return ephemeral(
-          `⏸️ あなたは現在「${member.status}」のため、回答できません。\n管理者に \`/resume\` でステータスを解除してもらってください。`,
-        );
-      }
-    } else {
-      await addMember(db, userId, userName, displayName).catch((e) =>
-        console.error('[Button] auto-register failed:', (e as Error).message),
+    const occ = await getOccurrence(db, occurrenceId);
+    if (!occ) return ephemeral('❌ 対象の開催回が見つかりません。');
+    const n = await getNotification(db, occ.notification_id);
+    if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
+
+    // メンバーマスタへ自動登録（無ければ）
+    await ensureMember(db, userId, userName, displayName).catch((e) =>
+      console.error('[Button] ensureMember failed:', (e as Error).message),
+    );
+
+    // 区分への自動所属（既存なら no-op、status は維持）
+    await addSegmentMember(db, n.segment_id, userId);
+
+    // 休止中なら回答拒否
+    const memberships = await listSegmentMembers(db, n.segment_id);
+    const mine = memberships.find((m) => m.user_id === userId);
+    if (mine && mine.status) {
+      return ephemeral(
+        `⏸️ あなたはこの区分で現在「${mine.status}」のため、回答できません。\n管理者に \`/resume\` でステータスを解除してもらってください。`,
       );
     }
-  } catch (e) {
-    // チェック失敗時は安全側に倒して回答を許可
-    console.error('[Button] member check failed:', (e as Error).message);
-  }
 
-  try {
-    await upsertEventLog(db, eventDate, userId, userName, status);
+    await upsertResponse(db, occ.id, userId, userName, status);
     // 表示名の自動更新は返答に不要なので投げっぱなし
     ctx.waitUntil(
       updateMemberDisplayName(db, userId, displayName, userName).catch((e) =>

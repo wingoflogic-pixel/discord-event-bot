@@ -1,15 +1,22 @@
 /**
- * Discord スラッシュコマンド登録スクリプト（ESM）
+ * Discord スラッシュコマンド登録スクリプト（ESM・CLI フォールバック）
+ *
+ * 通常は管理画面の「コマンドを登録」ボタンで登録できます（ターミナル不要）。
+ * このスクリプトは CLI で登録したい場合の代替手段です。
  *
  * 使い方:
  *   node scripts/register-commands.js
  *
- * 必要な環境変数:
+ * 必要な環境変数（.env）:
  *   DISCORD_BOT_TOKEN / DISCORD_APPLICATION_ID
  *   DISCORD_GUILD_ID（任意）… 指定するとそのサーバーへ即時登録（テスト向け）。
  *                            未指定はグローバル登録（反映に最大1時間）
+ *
+ * コマンド定義は src/discord/commands.json を単一ソースとして共有する。
  */
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const APP_ID = process.env.DISCORD_APPLICATION_ID;
@@ -19,28 +26,9 @@ if (!BOT_TOKEN || !APP_ID) {
   process.exit(1);
 }
 
-const commands = [
-  { name: 'recruit', description: '次回イベントの募集メッセージを手動で送信します (管理者用)', default_member_permissions: '8' },
-  {
-    name: 'pause',
-    description: 'メンバーを「休止中」に設定します (管理者用)',
-    default_member_permissions: '8',
-    options: [{ name: 'user', description: '休止中にするメンバー', type: 6, required: true }],
-  },
-  {
-    name: 'resume',
-    description: 'メンバーの「休止中」を解除します (管理者用)',
-    default_member_permissions: '8',
-    options: [{ name: 'user', description: '休止中を解除するメンバー', type: 6, required: true }],
-  },
-  { name: 'members', description: 'メンバー一覧とステータスを表示します (管理者用)', default_member_permissions: '8' },
-  {
-    name: 'addmember',
-    description: '新メンバーを追加します (管理者用)',
-    default_member_permissions: '8',
-    options: [{ name: 'user', description: '追加するメンバー', type: 6, required: true }],
-  },
-];
+// 単一ソース: src/discord/commands.json
+const commandsPath = fileURLToPath(new URL('../src/discord/commands.json', import.meta.url));
+const commands = JSON.parse(readFileSync(commandsPath, 'utf8'));
 
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
 const url = GUILD_ID
@@ -57,7 +45,7 @@ const response = await fetch(url, {
   headers: {
     Authorization: `Bot ${BOT_TOKEN}`,
     'Content-Type': 'application/json',
-    'User-Agent': 'DiscordBot (ChoiemuEventBot)',
+    'User-Agent': 'DiscordBot (https://github.com/discord-event-bot, 7.0.0)',
   },
   body: JSON.stringify(commands),
 });
