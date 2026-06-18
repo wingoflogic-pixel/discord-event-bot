@@ -7,7 +7,6 @@
 **不変条件**
 - 言語=日本語固定 / 時刻=JST固定（`getJSTNow()` 基準）。マルチサーバー（テナント分離なし・単一 ADMIN_TOKEN・ADR 0004）。
 - 応答ステータスは `参加` / `不参加` / `未定` の3値固定。
-- 旧 Vercel 版（`api/` `lib/` `vercel.json`）には触れない。
 - `env` から `DISCORD_CHANNEL_ID` は廃止済み（チャンネルは Notification ごと）。
 
 ---

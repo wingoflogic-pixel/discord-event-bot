@@ -89,6 +89,4 @@ npm run typecheck # 型チェック
 
 ## 補足
 - **cron**: `wrangler.toml` の `crons = ["0 12 * * *"]` は **UTC**（JST 21:00 相当）。日次 tick で全 active Notification を評価し、各通知の `recruit_days_before` / `remind_start_days` / `remind_undecided_days` に従って募集・リマインドを出す。通知ごとの時刻は `start_time`。
-- **データ移行（旧 Google Sheets から）**: `scripts/migrate-from-sheets.mjs` は**旧スキーマ向けで現行モデルには未対応**（先頭の注意書き参照）。新モデルへ移す場合は作り直しが必要。
 - **無料枠**: Workers 10万req/日。DM はチャンネル ID をキャッシュしてサブリクエストを抑制。
-- 旧 Vercel 版（`api/` `lib/` `vercel.json`）はカットオーバーまで凍結・不変（[`CLAUDE.md`](../CLAUDE.md)）。

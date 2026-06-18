@@ -1,15 +1,10 @@
 # CLAUDE.md
 
-## 重要な制約
+## プロジェクト構成
 
-既存の勤怠管理ツール（Vercel 版）には変更を加えないこと。
+Cloudflare Workers + D1 で稼働する Discord イベント出欠/勤怠Bot（`discord-event-bot`）。実装は `src/`（Workers版）、管理UIは `ui/`。
 
-対象（現在も本番稼働中・参照用に凍結）:
-- `api/`（`api/discord.js`, `api/cron.js`）
-- `lib/`（`lib/sheets.js`, `lib/discord.js`, `lib/date-utils.js`）
-- `vercel.json`
-
-これらはカットオーバー完了まで現状のまま維持する。新規開発は `src/`（Cloudflare Workers 版）側で行う。
+旧Vercel + Google Sheets 版（`api/`・`lib/`・`vercel.json`）からの本番カットオーバーは 2026-06-19 に完了し、旧版はリポジトリから撤去済み（必要時は git 履歴で参照可）。
 
 ## 本番 Choiemu チャンネルへの操作
 

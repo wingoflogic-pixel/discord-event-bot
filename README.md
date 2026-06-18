@@ -111,7 +111,7 @@ npm run typecheck    # 型チェック
 
 - [docs/setup-guide-ja.md](docs/setup-guide-ja.md) — **非エンジニア向けセットアップガイド（推奨）**
 - [docs/SETUP-cloudflare.md](docs/SETUP-cloudflare.md) — CLI でのセットアップ手順
-- [docs/cloudflare-migration.md](docs/cloudflare-migration.md) — 設計ドキュメント / 決定事項
+- [docs/IMPLEMENTATION-CONTRACT.md](docs/IMPLEMENTATION-CONTRACT.md) / [docs/adr/](docs/adr/) — 設計ドキュメント / 決定事項（ADR）
 
 ## 📜 ライセンス
 
