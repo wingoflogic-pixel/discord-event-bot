@@ -1,6 +1,6 @@
 import type { Env } from '../env';
 import type { Segment } from '../db/types';
-import { listGuildMembers } from './rest';
+import { listGuildMembers, type GuildMemberSummary } from './rest';
 import {
   listSegmentMembers,
   addSegmentMember,
@@ -29,6 +29,19 @@ export function membersWithRole<T extends { roles: string[] }>(members: T[], rol
 }
 
 /**
+ * 回答ボタン押下を許可してよいか（ロールゲート・ADR 0009）。
+ * - 手動区分(mentionRoleId=null) / '@everyone' は常に許可。
+ * - memberRoles=undefined（DM 由来でロール情報が無い）は許可する。DM のリマインド回答ボタンは
+ *   ロール同期で母集団に入った所属メンバーにしか届かないため、ロール判定不能でも通す（後段の
+ *   所属・休止チェックに委ねる）。ギルド内ボタンは member.roles が付くのでロールで判定する。
+ */
+export function roleGateAllows(mentionRoleId: string | null, memberRoles: string[] | undefined): boolean {
+  if (!mentionRoleId || mentionRoleId === '@everyone') return true;
+  if (memberRoles === undefined) return true;
+  return memberRoles.includes(mentionRoleId);
+}
+
+/**
  * ロール管理区分のメンバーを Discord ロールから完全同期する（ADR 0009）。
  * - mention_role_id が '@everyone' なら全人間メンバー、ロールIDならそのロール保有者を母集合にする。
  * - メンバー取得失敗（Server Members Intent 無効・一時エラー）は同期せず ok:false（既存を絶対に消さない）。
@@ -39,25 +52,28 @@ export function membersWithRole<T extends { roles: string[] }>(members: T[], rol
 export async function syncSegmentFromRole(
   env: Env,
   segment: Segment,
-  opts: { allowEmpty?: boolean } = {},
+  opts: { allowEmpty?: boolean; members?: GuildMemberSummary[] } = {},
 ): Promise<SegmentSyncResult> {
   const roleId = segment.mention_role_id;
   if (!roleId) {
     return { ok: false, added: 0, removed: 0, total: 0, message: 'この区分にはロールが設定されていません（手動管理）。' };
   }
 
-  let guildMembers;
-  try {
-    guildMembers = await listGuildMembers(env, segment.guild_id);
-  } catch (e) {
-    console.error(`[SegmentSync] member fetch failed (seg=${segment.id}): ${(e as Error).message}`);
-    return {
-      ok: false,
-      added: 0,
-      removed: 0,
-      total: 0,
-      message: 'メンバー取得に失敗しました（Discord の Server Members Intent を確認してください）。同期は行っていません。',
-    };
+  // 同一ギルドで複数区分を同期する場合、呼び出し側が取得済みメンバーを渡せる（重複フェッチ回避・cron 用）。
+  let guildMembers = opts.members;
+  if (!guildMembers) {
+    try {
+      guildMembers = await listGuildMembers(env, segment.guild_id);
+    } catch (e) {
+      console.error(`[SegmentSync] member fetch failed (seg=${segment.id}): ${(e as Error).message}`);
+      return {
+        ok: false,
+        added: 0,
+        removed: 0,
+        total: 0,
+        message: 'メンバー取得に失敗しました（Discord の Server Members Intent を確認してください）。同期は行っていません。',
+      };
+    }
   }
 
   // ロール保有者（@everyone は全員）。

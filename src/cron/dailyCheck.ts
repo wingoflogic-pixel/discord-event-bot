@@ -22,6 +22,8 @@ import {
   createButtonComponents,
   createStatusAllButton,
   buildMentionPrefix,
+  listGuildMembers,
+  type GuildMemberSummary,
 } from '../discord/rest';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -358,15 +360,30 @@ export async function mainDailyCheck(env: Env): Promise<void> {
   console.log(`Active notifications: ${notifications.length}`);
 
   // ロール管理区分を Discord ロールから同期してから処理する（ADR 0009）。
-  // 有効通知が参照する区分のみ。cron は無人化/取得失敗をスキップ（allowEmpty=false）。
+  // 有効通知が参照する区分のみ。ギルド単位でメンバーを1回だけ取得して使い回す（重複フェッチ回避）。
+  // cron は無人化/取得失敗をスキップ（allowEmpty=false）。1区分の同期失敗で後続処理を止めない（try/catch）。
   const segmentIds = [...new Set(notifications.map((n) => n.segment_id))];
+  const guildMembersCache = new Map<string, GuildMemberSummary[] | null>();
   for (const segId of segmentIds) {
-    const seg = await getSegment(env.DB, segId);
-    if (seg && seg.mention_role_id) {
-      const r = await syncSegmentFromRole(env, seg, { allowEmpty: false });
+    try {
+      const seg = await getSegment(env.DB, segId);
+      if (!seg || !seg.mention_role_id) continue;
+      if (!guildMembersCache.has(seg.guild_id)) {
+        try {
+          guildMembersCache.set(seg.guild_id, await listGuildMembers(env, seg.guild_id));
+        } catch (e) {
+          console.error(`[SegmentSync] guild members fetch failed (guild=${seg.guild_id}): ${(e as Error).message}`);
+          guildMembersCache.set(seg.guild_id, null);
+        }
+      }
+      const members = guildMembersCache.get(seg.guild_id);
+      if (!members) continue; // 取得失敗ギルドはスキップ（既存メンバーを維持）
+      const r = await syncSegmentFromRole(env, seg, { allowEmpty: false, members });
       console.log(
         `[SegmentSync] seg=${segId} ${r.ok ? `+${r.added}/-${r.removed} (=${r.total})` : 'skip: ' + r.message}`,
       );
+    } catch (e) {
+      console.error(`[SegmentSync] seg=${segId} failed: ${(e as Error).message}`);
     }
   }
 

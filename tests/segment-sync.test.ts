@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { env } from 'cloudflare:test';
-import { membersWithRole, isRoleManagedSegment, syncSegmentFromRole } from '../src/discord/syncSegment';
+import {
+  membersWithRole,
+  isRoleManagedSegment,
+  roleGateAllows,
+  syncSegmentFromRole,
+} from '../src/discord/syncSegment';
 import {
   createSegment,
   getSegment,
@@ -34,6 +39,24 @@ describe('isRoleManagedSegment', () => {
   });
   it('null は false（手動管理）', () => {
     expect(isRoleManagedSegment({ mention_role_id: null })).toBe(false);
+  });
+});
+
+describe('roleGateAllows（回答ボタンのロールゲート・ADR 0009）', () => {
+  it('手動区分(null)は常に許可', () => {
+    expect(roleGateAllows(null, [])).toBe(true);
+    expect(roleGateAllows(null, undefined)).toBe(true);
+  });
+  it('@everyone は常に許可', () => {
+    expect(roleGateAllows('@everyone', [])).toBe(true);
+  });
+  it('DM(member 不在=undefined)は許可（リマインド回答は既存メンバー前提）', () => {
+    expect(roleGateAllows('r1', undefined)).toBe(true);
+  });
+  it('ギルド内: ロール保有は許可・非保有/空は拒否', () => {
+    expect(roleGateAllows('r1', ['r1', 'r2'])).toBe(true);
+    expect(roleGateAllows('r1', ['r2'])).toBe(false);
+    expect(roleGateAllows('r1', [])).toBe(false);
   });
 });
 

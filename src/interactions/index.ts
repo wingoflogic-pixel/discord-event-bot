@@ -15,6 +15,7 @@ import {
 import { upsertResponse, getStatusBuckets } from '../db/responses';
 import { assignNumbers } from '../db/assignments';
 import { sendChannelMessage, buildStatusMessage, buildAllStatusMessage } from '../discord/rest';
+import { roleGateAllows } from '../discord/syncSegment';
 import { formatOccurrenceLabel } from '../lib/date';
 import { recruitNotificationNow } from '../cron/dailyCheck';
 
@@ -366,14 +367,13 @@ async function handleButton(
     const n = await getNotification(db, occ.notification_id);
     if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
 
-    // ロール管理区分は、押下者が当該ロールを保有する場合のみ回答可（@everyone は全員可・ADR 0009）。
-    // member.roles は interaction に同梱されるため追加の Discord API は不要。
+    // ロール管理区分はロールゲートで判定（@everyone は全員可・ADR 0009）。
+    // ギルド内ボタンは member.roles が同梱される（追加API不要）。DM のリマインド回答は member 不在の
+    // ためロール判定をスキップし、後段の所属/休止チェックに委ねる（roleGateAllows）。
     const segment = await getSegment(db, n.segment_id);
-    if (segment && segment.mention_role_id && segment.mention_role_id !== '@everyone') {
-      const userRoles = interaction.member?.roles ?? [];
-      if (!userRoles.includes(segment.mention_role_id)) {
-        return ephemeral('🚫 この区分の対象（指定ロールの保有者）ではないため、回答できません。');
-      }
+    const memberRoles = interaction.member ? (interaction.member.roles ?? []) : undefined;
+    if (segment && !roleGateAllows(segment.mention_role_id, memberRoles)) {
+      return ephemeral('🚫 この区分の対象（指定ロールの保有者）ではないため、回答できません。');
     }
 
     // メンバーマスタへ自動登録（無ければ）
