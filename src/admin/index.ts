@@ -3,6 +3,7 @@ import type { NotificationType } from '../db/types';
 import { listGuilds, listGuildChannels, listGuildMembers } from '../discord/rest';
 import {
   listSegments,
+  getSegment,
   createSegment,
   updateSegment,
   deleteSegment,
@@ -12,6 +13,7 @@ import {
   setSegmentMemberStatus,
   removeSegmentMember,
 } from '../db/segments';
+import { syncSegmentFromRole } from '../discord/syncSegment';
 import { getAllMembers, upsertMember, deleteMember } from '../db/members';
 import {
   listNotifications,
@@ -271,6 +273,18 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         });
         return json({ ok: true }, 201);
       }
+    }
+    // /segments/:id/sync-from-role （ロール管理区分を Discord ロールから手動同期・ADR 0009）
+    const segSync = path.match(/^\/segments\/(\d+)\/sync-from-role$/);
+    if (segSync && method === 'POST') {
+      const seg = await getSegment(db, Number(segSync[1]));
+      if (!seg) return json({ error: 'Not found' }, 404);
+      if (!seg.mention_role_id) {
+        return json({ error: 'この区分はロール管理ではありません（ロール未設定）。' }, 400);
+      }
+      // 手動同期は確認ダイアログ経由のため allowEmpty=true（明示的に空にできる）。
+      const r = await syncSegmentFromRole(env, seg, { allowEmpty: true });
+      return json(r, r.ok ? 200 : 400);
     }
     // /segments/:id
     const segId = path.match(/^\/segments\/(\d+)$/);

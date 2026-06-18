@@ -221,11 +221,13 @@ export interface ChannelSummary {
   id: string;
   name: string;
 }
-/** メンバーピッカーの 1 候補（サーバー内ニック付き・ADR 0006） */
+/** メンバーピッカーの 1 候補（サーバー内ニック付き・ADR 0006）。roles はロール同期用（ADR 0009） */
 export interface GuildMemberSummary {
   user_id: string;
   user_name: string | null;
   display_name: string | null;
+  /** このメンバーが保有する Discord ロールID（@everyone は含まれない） */
+  roles: string[];
 }
 
 const MOCK_GUILDS: GuildSummary[] = [
@@ -238,9 +240,9 @@ const MOCK_CHANNELS: ChannelSummary[] = [
   { id: '2003', name: 'スタッフ連絡' },
 ];
 const MOCK_MEMBERS: GuildMemberSummary[] = [
-  { user_id: '3001', user_name: 'aoi', display_name: 'あおい' },
-  { user_id: '3002', user_name: 'kenta', display_name: 'けんた' },
-  { user_id: '3003', user_name: 'miki', display_name: 'みき' },
+  { user_id: '3001', user_name: 'aoi', display_name: 'あおい', roles: ['4001'] },
+  { user_id: '3002', user_name: 'kenta', display_name: 'けんた', roles: ['4001'] },
+  { user_id: '3003', user_name: 'miki', display_name: 'みき', roles: [] },
 ];
 
 function botHeaders(env: Env): HeadersInit {
@@ -287,6 +289,7 @@ export async function listGuildMembers(env: Env, guildId: string): Promise<Guild
     const page = (await res.json()) as Array<{
       user?: { id: string; username?: string; global_name?: string | null; bot?: boolean };
       nick?: string | null;
+      roles?: string[];
     }>;
     if (page.length === 0) break;
     for (const m of page) {
@@ -295,6 +298,7 @@ export async function listGuildMembers(env: Env, guildId: string): Promise<Guild
         user_id: m.user.id,
         user_name: m.user.username ?? null,
         display_name: m.nick ?? m.user.global_name ?? m.user.username ?? null,
+        roles: m.roles ?? [],
       });
     }
     after = page[page.length - 1].user?.id ?? after;

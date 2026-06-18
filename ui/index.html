@@ -812,7 +812,9 @@
         cacheSegments = segs;
         const rows = segs.map((s) => `<div class="listrow">
           <div><div style="font-weight:600">${esc(s.name)}</div>
-            <div class="muted" style="font-size:12px;margin-top:2px">メンション: ${s.mention_role_id ? `<span class="pill">${esc(s.mention_role_id)}</span>` : '<span class="pill off">なし</span>'}</div></div>
+            <div class="muted" style="font-size:12px;margin-top:2px">${s.mention_role_id
+              ? `<span class="pill on">ロール管理</span> <span class="pill">${esc(s.mention_role_id)}</span>`
+              : '<span class="pill off">手動管理</span>'}</div></div>
           <div class="actions">
             <button class="btn sm secondary" data-smembers="${s.id}">メンバー</button>
             <button class="btn sm ghost" data-sedit="${s.id}">編集</button>
@@ -824,7 +826,7 @@
             <input type="hidden" id="segId" />
             <div class="row">
               <div><label>名前</label><input id="segName" placeholder="例: キャスト" /></div>
-              <div><label>@メンション先（任意・ロールID / @everyone）</label><input id="segRole" placeholder="未設定可" /></div>
+              <div><label>ロール / @everyone（任意）<span class="muted">設定するとメンバーをこのロールから自動同期＋メンション先に</span></label><input id="segRole" placeholder="未設定＝手動管理" /></div>
             </div>
             <div class="actions" style="margin-top:12px">
               <button class="btn" id="segSave">保存</button>
@@ -864,29 +866,43 @@
         } catch (e) { toast(e.message, true); }
       }
 
-      // ----- 区分メンバー（ピッカー） -----
+      // ----- 区分メンバー（手動ピッカー / ロール同期・ADR 0009） -----
       let cacheGuildMembers = null;
       async function loadSegmentMembers(segmentId) {
         const seg = cacheSegments.find((s) => s.id === segmentId);
+        const roleManaged = !!(seg && seg.mention_role_id);
+        const isEveryone = !!(seg && seg.mention_role_id === '@everyone');
         let list = [];
         try { list = await api('/segments/' + segmentId + '/members'); } catch (e) { return toast(e.message, true); }
         const rows = list.map((m) => {
           const paused = m.status === '休止中';
           const name = m.display_name || m.user_name || m.user_id;
+          // ロール管理区分は手動「外す」を出さない（同期が支配）。休止/再開は可。
+          const delBtn = roleManaged ? '' : `<button class="btn sm danger" data-smdel="${esc(m.user_id)}">外す</button>`;
           return `<div class="pickrow">
             <div>${esc(name)} <span class="muted" style="font-size:12px">${esc(m.user_id)}</span>
               ${paused ? '<span class="pill off">休止中</span>' : '<span class="pill on">アクティブ</span>'}</div>
             <div class="actions">
               <button class="btn sm secondary" data-smtoggle="${esc(m.user_id)}" data-status="${paused ? '' : '休止中'}">${paused ? '再開' : '休止'}</button>
-              <button class="btn sm danger" data-smdel="${esc(m.user_id)}">外す</button>
+              ${delBtn}
             </div></div>`;
         }).join('');
+        const synced = seg && seg.members_synced_at ? esc(seg.members_synced_at) : '未同期';
+        const roleLabel = isEveryone ? '@everyone（全員）' : esc(seg ? seg.mention_role_id : '');
+        const emptyMsg = roleManaged
+          ? 'まだ同期されていません。下の「ロールから同期」を実行してください。'
+          : 'まだ誰も所属していません。下のピッカーから追加できます。';
+        const panel = roleManaged
+          ? `<div class="summary">🔗 <b>ロール管理区分</b>：メンバーは Discord ロール <code>${roleLabel}</code> から自動同期されます（手動の追加/外すは不可・休止は可）。最終同期: ${synced}</div>
+             ${isEveryone ? '<p class="muted" style="font-size:12px;color:var(--warn)">⚠️ @everyone はサーバー全員が対象です。リマインド/ノルマの DM も全員へ届きます。</p>' : ''}
+             <div class="actions"><button class="btn" id="segSyncBtn">🔄 ロールから同期</button></div>`
+          : `<h3 style="margin-top:14px">メンバーを追加</h3>
+             <div class="search"><input id="memSearch" placeholder="サーバー参加者を検索（User ID 入力は不要）" /></div>
+             <div id="memPicker" style="margin-top:8px"><p class="muted">読み込み中…</p></div>`;
         $('#segMembersBox').innerHTML = `<fieldset>
           <legend>区分メンバー: ${esc(seg ? seg.name : segmentId)} (${list.length})</legend>
-          ${list.length ? rows : '<div class="empty">まだ誰も所属していません。下のピッカーから追加できます。</div>'}
-          <h3 style="margin-top:14px">メンバーを追加</h3>
-          <div class="search"><input id="memSearch" placeholder="サーバー参加者を検索（User ID 入力は不要）" /></div>
-          <div id="memPicker" style="margin-top:8px"><p class="muted">読み込み中…</p></div>
+          ${list.length ? rows : '<div class="empty">' + emptyMsg + '</div>'}
+          ${panel}
           </fieldset>`;
         $('#segMembersBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
         document.querySelectorAll('[data-smtoggle]').forEach((b) => {
@@ -904,7 +920,24 @@
           };
         });
 
-        // メンバーピッカー（サーバー在籍をライブ取得）
+        // ロール管理区分: 手動同期ボタン（破壊的確認つき）。ピッカーは出さない。
+        if (roleManaged) {
+          $('#segSyncBtn').onclick = (e) => withBusy(e.currentTarget, async () => {
+            const warn = isEveryone
+              ? 'Discord ロール @everyone（サーバー全員）からメンバーを同期します。ロール非保有者は区分から外れ、全員がリマインド/ノルマ DM の対象になります。'
+              : 'Discord ロールからメンバーを同期します。ロール非保有の現メンバーは区分から外れます。';
+            if (!(await confirmDialog(warn, { okLabel: '同期する', danger: true }))) return;
+            try {
+              const r = await api('/segments/' + segmentId + '/sync-from-role', { method: 'POST' });
+              toast(r && r.message ? r.message : '同期しました');
+              try { cacheSegments = await api('/segments?guild_id=' + encodeURIComponent(guild.id)); } catch (_) {}
+              loadSegmentMembers(segmentId);
+            } catch (e) { toast(e.message, true); }
+          });
+          return;
+        }
+
+        // メンバーピッカー（手動区分のみ・サーバー在籍をライブ取得）
         const already = new Set(list.map((m) => m.user_id));
         if (!cacheGuildMembers) {
           try { cacheGuildMembers = await api('/guilds/' + guild.id + '/members'); }
