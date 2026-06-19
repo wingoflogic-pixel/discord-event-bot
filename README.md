@@ -60,7 +60,7 @@ tests/              vitest（D1 含む）
 
 ## 🛠 開発者向け（CLI）
 
-開発・初回 CLI セットアップ・配信/更新フローは **[docs/dev-and-release-flow.md](docs/dev-and-release-flow.md)** を参照（開発者向けの唯一の手順書）。
+開発・初回 CLI セットアップ・配信/更新フローは **[docs/dev/dev-and-release-flow.md](docs/dev/dev-and-release-flow.md)** を参照（開発者向けの唯一の手順書）。
 
 - `npm run deploy` = `npm run db:migrate:remote && wrangler deploy`（本番 D1 へマイグレーション適用 → デプロイ）。**本番 Choiemu への操作にあたるため、実行前に必ずユーザー許可を得る。**
 - マイグレーションはバインディング名 `DB` 指定（`wrangler d1 migrations apply DB --remote`）。配布先の D1 が別名で生成されるため統一。
@@ -86,8 +86,8 @@ tests/              vitest（D1 含む）
 ## 📚 ドキュメント
 
 - `setup.html` — **非エンジニア向けセットアップ（BOOTH 配布・ターミナル不要）**
-- [docs/dev-and-release-flow.md](docs/dev-and-release-flow.md) — **開発者向け**（開発・初回 CLI セットアップ・配信/更新フロー）
-- [docs/IMPLEMENTATION-CONTRACT.md](docs/IMPLEMENTATION-CONTRACT.md) / [docs/adr/](docs/adr/) — 設計ドキュメント / 決定事項（ADR）
+- [docs/dev/dev-and-release-flow.md](docs/dev/dev-and-release-flow.md) — **開発者向け**（開発・初回 CLI セットアップ・配信/更新フロー）
+- [docs/dev/IMPLEMENTATION-CONTRACT.md](docs/dev/IMPLEMENTATION-CONTRACT.md) / [docs/dev/adr/](docs/dev/adr/) — 設計ドキュメント / 決定事項（ADR）
 
 ## 📜 ライセンス
 

@@ -21,9 +21,10 @@ paths:
 - マイグレーションはバインディング名 `DB` で指定する（`wrangler d1 migrations apply DB --remote`）。Deployボタン配布時に各利用者のD1が別名で生成されるため、バインディング名で統一する。
 
 ## 配信・更新
-- 配布チャネル: BOOTH＝入口（setup.html 等の小さな一式）。公開GitHubリポジトリ＝「Deploy to Cloudflare」ボタンの動力源で廃止不可（ボタンが公開gitリポジトリを参照するため）。
+- 配布チャネル: **BOOTH＝入口**。公開GitHubリポジトリ＝「Deploy to Cloudflare」ボタンの動力源で廃止不可（ボタンが公開gitリポジトリを参照するため）。
+- **BOOTH配布物の定義（唯一の正）**: `setup.html` **単体のみ**（自己完結HTMLのためzip不要）。配布物を増やす場合は必ずこの行を更新する。`.env` / `.dev.vars` / `node_modules` / 実トークン / `src/` 等のソースは**絶対に同梱しない**（利用者はDeployボタンで公開リポジトリから取得する）。
 - 更新: 利用者は自分のfork で「Sync fork」を押すだけ → Cloudflare Workers Builds が push ごとに deploy を実行 → マイグレーション適用＋デプロイが自動。CLI不要。
 - リリース時は package.json の version を semver で更新し、日本語リリースノートで「DB変更あり/なし」を明示する。
 - zip衛生: 配布zipに `.env` / `.dev.vars` / `node_modules` / 実トークンを絶対に含めない。
 
-詳細は docs/dev-and-release-flow.md、決定の根拠は docs/adr/0011-distribution-and-update-model.md を参照。
+詳細は docs/dev/dev-and-release-flow.md、決定の根拠は docs/dev/adr/0011-distribution-and-update-model.md を参照。

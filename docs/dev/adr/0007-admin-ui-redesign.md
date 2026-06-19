@@ -1,6 +1,6 @@
 # 管理画面リデザイン（Discord API ピッカーで手打ち廃止・RRULE 非表示・2 層シェル）
 
-オープンソースとして公開できる品質へ管理画面を作り直すにあたり、UI レベルで後戻りしにくい I/F 判断を行う。背景・用語は [CONTEXT.md](../../CONTEXT.md)、上位のモデル判断は ADR [0004](./0004-multi-server.md)／[0005](./0005-drop-event-layer.md)／[0006](./0006-member-three-layers.md)。
+オープンソースとして公開できる品質へ管理画面を作り直すにあたり、UI レベルで後戻りしにくい I/F 判断を行う。背景・用語は [CONTEXT.md](../CONTEXT.md)、上位のモデル判断は ADR [0004](./0004-multi-server.md)／[0005](./0005-drop-event-layer.md)／[0006](./0006-member-three-layers.md)。
 
 ## 決定
 

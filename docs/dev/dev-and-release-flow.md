@@ -1,10 +1,10 @@
 # 開発・配信・更新フロー
 
-本書は `discord-event-bot`（Cloudflare Workers + D1 で稼働する汎用 Discord イベント出欠/勤怠 Bot）の、開発・配信・更新の3フローを通しで解説する詳細ランブックである。要約版のルール（守るべき要点の箇条書き）は `.claude/rules/dev-and-release.md` にあり、本書はその**詳細手順**を担う。なぜこの配信・更新モデルを採用したのかという**決定の根拠**は `docs/adr/0011-distribution-and-update-model.md` に記録している。本書とルール・ADR で用語と表現は揃えてある。
+本書は `discord-event-bot`（Cloudflare Workers + D1 で稼働する汎用 Discord イベント出欠/勤怠 Bot）の、開発・配信・更新の3フローを通しで解説する詳細ランブックである。要約版のルール（守るべき要点の箇条書き）は `.claude/rules/dev-and-release.md` にあり、本書はその**詳細手順**を担う。なぜこの配信・更新モデルを採用したのかという**決定の根拠**は `docs/dev/adr/0011-distribution-and-update-model.md` に記録している。本書とルール・ADR で用語と表現は揃えてある。
 
 リポジトリ構成は、実装が `src/`、管理 UI が `ui/`、スキーマのマイグレーションが `migrations/`、配布アシスタント（利用者向けセットアップページ）が `setup.html`（リポジトリ直下）である。言語は日本語。
 
-なお非エンジニアの利用者は CLI を使わず、BOOTH で受け取った `setup.html` から「Deploy to Cloudflare」ボタンでセットアップする（[配信フロー](#配信フロー)参照）。本書は**保守者／開発者が CLI で環境を立ち上げる**ための手順書である。データモデル（Server ＞ Notification → Segment ＞ Occurrence）の用語は [`CONTEXT.md`](../CONTEXT.md)、設計は [`docs/adr/`](adr) と [`docs/IMPLEMENTATION-CONTRACT.md`](IMPLEMENTATION-CONTRACT.md) を参照。言語=日本語固定／時刻=JST固定／マルチサーバー（テナント分離なし・単一 `ADMIN_TOKEN`）。
+なお非エンジニアの利用者は CLI を使わず、BOOTH で受け取った `setup.html` から「Deploy to Cloudflare」ボタンでセットアップする（[配信フロー](#配信フロー)参照）。本書は**保守者／開発者が CLI で環境を立ち上げる**ための手順書である。データモデル（Server ＞ Notification → Segment ＞ Occurrence）の用語は [`CONTEXT.md`](CONTEXT.md)、設計は [`docs/dev/adr/`](adr) と [`docs/dev/IMPLEMENTATION-CONTRACT.md`](IMPLEMENTATION-CONTRACT.md) を参照。言語=日本語固定／時刻=JST固定／マルチサーバー（テナント分離なし・単一 `ADMIN_TOKEN`）。
 
 ---
 
@@ -161,7 +161,7 @@ npm run typecheck # = tsc --noEmit
 
 ### BOOTH 入口と GitHub 基盤の役割分担
 
-- **BOOTH ＝入口**。VRChat 層になじみ深い配布チャネルとして、利用者が最初に触れる場所。配布物は `setup.html` 等の小さな一式。
+- **BOOTH ＝入口**。VRChat 層になじみ深い配布チャネルとして、利用者が最初に触れる場所。**配布物は `setup.html` 単体**（下記「配布物の定義」参照）。
 - **公開 GitHub リポジトリ ＝基盤**。「Deploy to Cloudflare」ボタンの動力源。
 
 ### GitHub を消せない理由
@@ -169,10 +169,12 @@ npm run typecheck # = tsc --noEmit
 - 「Deploy to Cloudflare」ボタンは**公開 git リポジトリを参照**して動く。BOOTH は git ホスティングではないため、ボタンの参照先になれない。
 - したがって公開 GitHub リポジトリは**廃止できない**。ただし利用者は GitHub の UI を直接触る必要はなく、BOOTH で受け取った `setup.html` 経由でデプロイを進める。
 
-### 配布物（setup.html 等）
+### 配布物の定義（唯一の正）
 
-- 配布 zip には `setup.html`（セットアップアシスタント）を中心とした**小さな一式**を入れる。
+- **BOOTH 配布物 = `setup.html` 単体のみ**。`setup.html` は自己完結 HTML（画像・外部依存なし）なので **zip すら不要**で、ファイル 1 つをそのまま配布できる。
+- 配布物を増やす（例: 補足 PDF を添える）場合は、**必ずこの節と `.claude/rules/dev-and-release.md` の定義を同時に更新**してから増やす。ここを配布内容の唯一の正とする。
 - `setup.html` は、`ADMIN_TOKEN` 用のパスワード生成や、デプロイ手順への導線を提供する（`package.json` の `cloudflare.bindings` 説明文と対応）。
+- 利用者が必要とするソース一式は **Deploy ボタン経由で公開リポジトリから取得**されるため、配布物にソース（`src/` 等）を同梱する必要はない。
 
 ### zip 衛生
 
