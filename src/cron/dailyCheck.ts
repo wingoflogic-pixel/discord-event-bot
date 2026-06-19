@@ -94,7 +94,7 @@ function slotLabel(occ: Occurrence, n: Notification): string {
   return formatOccurrenceLabel(occ.occurrence_date, slotTime(occ, n), n.duration_minutes);
 }
 
-/** [PRD 4.2.1] 募集 */
+/** 募集 */
 async function sendRecruitment(
   env: Env,
   n: Notification,
@@ -110,7 +110,7 @@ async function sendRecruitment(
 }
 
 /**
- * [PRD 4.2.1] 単発・複数候補日の募集。候補日一覧のヘッダ（メンションはここで1回）に続けて、
+ * 単発・複数候補日の募集。候補日一覧のヘッダ（メンションはここで1回）に続けて、
  * 候補日ごとに 1 メッセージ（参加/不参加/未定/状況確認ボタン付き）を投稿する。
  * ボタン custom_id は {action}_{occurrenceId} で開催回単位なので回答ハンドラは無改修で機能する。
  * 募集 UI（/recruit・管理画面の「今すぐ募集」）からも再利用する。
@@ -207,7 +207,7 @@ export async function recruitNotificationNow(
     : { ok: false, message: '募集メッセージの送信に失敗しました（文字数超過や Discord エラーの可能性）。' };
 }
 
-/** [PRD 4.2.4] ノルマ確認（個別 DM） */
+/** ノルマ確認（個別 DM） */
 async function checkQuotaAndNotify(env: Env, n: Notification): Promise<void> {
   const db = env.DB;
   const alerts = await checkQuotaForNotification(db, n);
@@ -234,7 +234,7 @@ async function checkQuotaAndNotify(env: Env, n: Notification): Promise<void> {
   console.log(`✅ [Quota] sent ${sent}/${alerts.length} (n=${n.id})`);
 }
 
-/** [PRD 4.2.2] 未回答リマインド（個別 DM）。対象=区分アクティブメンバー − 既回答 */
+/** 未回答リマインド（個別 DM）。対象=区分アクティブメンバー − 既回答 */
 async function sendUnansweredReminder(
   env: Env,
   n: Notification,
@@ -272,7 +272,7 @@ async function sendUnansweredReminder(
   console.log(`✅ [Unanswered] DM sent ${sent}/${unanswered.length} (n=${n.id})`);
 }
 
-/** [PRD 4.2.3] 未定者リマインド（個別 DM）。休止者は除外 */
+/** 未定者リマインド（個別 DM）。休止者は除外 */
 async function sendUndecidedReminder(
   env: Env,
   n: Notification,
@@ -414,7 +414,7 @@ async function processOneoffCandidates(env: Env, n: Notification): Promise<void>
 }
 
 /**
- * [PRD 4.2] 日次メインチェック。active な Notification をすべてループし、
+ * 日次メインチェック。active な Notification をすべてループし、
  * recurring / 単一候補 oneoff は従来どおり、単発・複数候補日は候補回ごとに
  * 募集 & ノルマ / 未回答リマインド / 未定リマインドを判定・実行する。
  */
