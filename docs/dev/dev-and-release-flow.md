@@ -67,7 +67,7 @@ wrangler secret put ADMIN_TOKEN          # 管理UIのパスワード。例: ope
 npm run register-commands   # = node scripts/register-commands.js
 ```
 
-登録されるコマンド: `/recruit` `/assign`（ともに `notification_id` 指定）／ `/pause` `/resume`（`user` ＋任意 `segment_id`）／ `/members`（任意 `segment_id`）。
+登録されるコマンド（v7.1.0 以降の現行構成）: `/recruit`（管理者・引数なし＝チャンネルから Notification を解決して募集投稿） / `/help`（誰でも・コマンド一覧と管理画面 URL を ephemeral 表示） / `/manage`（管理者・管理画面 URL を ephemeral 表示）。旧 `/assign` `/pause` `/resume` `/members` は 2026-06-20 のコマンド再編で削除済み（管理 UI で代替）。
 
 ### 6. 初回デプロイ
 
@@ -79,7 +79,7 @@ npm run deploy:cli
 #   && wrangler deploy --config wrangler.local.jsonc
 ```
 
-配布用 `wrangler.jsonc` は `database_id` を記載していないため、素の `npm run deploy`（`--config` 無し）をローカルで実行すると**本番とは別の新しい D1 を自動生成してしまう**（本番 Choiemu データから切り離される）。素の `npm run deploy` は **Workers Builds 側が実行する用**（利用者の fork 接続・開発者の staging/prod）で、ローカルからの本番デプロイには使わない。詳細は[配布用設定は database_id を記載しない](#配布用設定は-database_id-を記載しない)を参照。
+配布用 `wrangler.jsonc` は `database_id` を記載していないため、素の `npm run deploy`（`--config` 無し）をローカルで実行すると **同名既存 D1 を再利用するか・無ければ新しい D1 を自動生成するか**は Cloudflare auto-provisioning の挙動に依存する（[ADR 0011 追補2](adr/0011-distribution-and-update-model.md) で実機検証済み：同名既存があれば再利用される）。同名既存があれば本番 D1 にそのまま接続されることになり、テスト目的のローカル操作で意図せず本番 D1 を触る危険があるため、**保守者のローカル実行では必ず `npm run deploy:cli`**（`wrangler.local.jsonc` で実 `database_id` を明示）**を使う**。素の `npm run deploy` は **Workers Builds 側が実行する用**（利用者の fork 接続・開発者の staging/prod）で、ローカルからは使わない。詳細は[配布用設定は database_id を記載しない](#配布用設定は-database_id-を記載しない)を参照。
 
 `deploy:cli` も**本番 D1 へマイグレーションを適用してからデプロイ**する。本番 Choiemu 操作にあたるため、実行前に必ずユーザーの明示的な許可を得ること（詳細は[npm run deploy / deploy:cli の本番マイグレーション挙動](#npm-run-deploy--deploycli-の本番マイグレーション挙動要ユーザー許可)）。出力される URL（例 `https://discord-event-bot.<account>.workers.dev`）を控える。
 
