@@ -202,7 +202,7 @@
       <tr><td>Discord 接続先</td><td>テスト用アプリ＋ダミーサーバー</td><td>本番Choiemu（開発者のサーバー）</td><td>利用者各自のサーバー</td></tr>
       <tr><td>更新のきっかけ</td><td><code>staging</code> へ push</td><td><code>main</code> へ昇格（push）</td><td>fork で「Sync fork」</td></tr>
       <tr><td>用途</td><td>仕上げ検証（本番と同条件のパリティ確認）</td><td>実運用（Choiemu）</td><td>利用者の実運用</td></tr>
-      <tr><td>現状（移行）</td><td>未構築（Workers Builds 接続予定）</td><td>当面ローカルCLI（<code>deploy:cli</code>）→ Workers Builds へ移行</td><td>設計どおり（空 <code>database_id</code> で自動生成）</td></tr>
+      <tr><td>現状（移行）</td><td>未構築（Workers Builds 接続予定）</td><td>当面ローカルCLI（<code>deploy:cli</code>）→ Workers Builds へ移行</td><td>設計どおり（<code>database_id</code> 省略で自動生成）</td></tr>
     </tbody>
   </table>
 
@@ -255,7 +255,7 @@
 
   <div class="callout good">
     <p class="t">D1がゼロ操作で立つ仕組み（Q への答え）</p>
-    <p>Deployボタンが <code>wrangler</code> 設定のD1バインディング宣言を読み、ユーザーのアカウントに<b>D1を自動生成</b>します（後述リスク①のとおり、自動生成には <code>database_id</code> を空にした配布用設定が前提）。デプロイ時に <code>deploy</code> スクリプトが <code>wrangler d1 migrations apply DB --remote</code> を先に走らせ、<code>migrations/</code> の全連番（v7.0.1 時点で 0001〜0009）を順に適用して<b>スキーマを自動構築</b>します。マイグレーションを「DB名」でなく<b>バインディング名 <code>DB</code></b> で指定しているのは、ユーザーごとにD1名が変わっても同じスクリプトで動かすためです。なお<b>「合言葉」とは Deployボタンの入力欄で渡す4つのシークレット</b>（<code>DISCORD_PUBLIC_KEY</code> / <code>DISCORD_APPLICATION_ID</code> / <code>DISCORD_BOT_TOKEN</code> / <code>ADMIN_TOKEN</code>。出典 <code>.dev.vars.example</code> ／ <code>package.json</code> の <code>cloudflare.bindings</code>）のことです。</p>
+    <p>Deployボタンが <code>wrangler</code> 設定のD1バインディング宣言を読み、ユーザーのアカウントに<b>D1を自動生成</b>します（後述リスク①のとおり、自動生成には <code>database_id</code> を記載しない配布用設定が前提）。デプロイ時に <code>deploy</code> スクリプトが先に <code>wrangler deploy</code> でD1を自動生成して id を <code>wrangler.jsonc</code> に書き戻し、その後 <code>wrangler d1 migrations apply DB --remote</code> がその id を解決して <code>migrations/</code> の全連番（v7.0.1 時点で 0001〜0009）を順に適用し<b>スキーマを自動構築</b>します。マイグレーションを「DB名」でなく<b>バインディング名 <code>DB</code></b> で指定しているのは、ユーザーごとにD1名が変わっても同じスクリプトで動かすためです。なお<b>「合言葉」とは Deployボタンの入力欄で渡す4つのシークレット</b>（<code>DISCORD_PUBLIC_KEY</code> / <code>DISCORD_APPLICATION_ID</code> / <code>DISCORD_BOT_TOKEN</code> / <code>ADMIN_TOKEN</code>。出典 <code>.dev.vars.example</code> ／ <code>package.json</code> の <code>cloudflare.bindings</code>）のことです。</p>
   </div>
 
   <h3>「ローカル→Cloudflare」でGitHubを省けないのか？</h3>
@@ -269,8 +269,8 @@
     <tbody>
       <tr><th>事実（旧）</th><td>旧 <code>wrangler.toml</code> に開発者のアカウントの実 <code>database_id</code>（<code>f6ff753c-…</code>）がベタ書きされていた。</td></tr>
       <tr><th>影響</th><td>Cloudflareの自動プロビジョニングは「IDが書かれているバインディング＝既存リソース」とみなして<b>新規作成をスキップ</b>する（Cloudflare公式・末尾出典で確認）。そのIDはユーザーのアカウントに存在しないため、放置すれば<b>ユーザーのデプロイが失敗する蓋然性が高い</b>。</td></tr>
-      <tr><th>対応（実施済み）</th><td><b>本変更で対応済み</b>: ①設定を <code>wrangler.toml</code> → <b><code>wrangler.jsonc</code> へ移行</b>し（自動生成IDの書き戻しが <code>.toml</code> で行われない issue #13632 を回避）、②<code>database_id</code> を<b>空</b>にして自動プロビジョニングを発火させ、③<code>package.json</code> の <code>wrangler</code> 下限を <b><code>^4.102.0</code></b>（PR #14275 初収録版）に引き上げた（空IDでもバインディング名 <code>DB</code> からUUIDをAPI解決して <code>wrangler d1 migrations apply DB --remote</code> が通る）。lockfile は解決版 <code>4.103.0</code> のまま・スペック文字列のみ手修正し、<code>@emnapi</code> ピン留め（Deployビルド対策）と <code>npm ci</code> 整合を維持。ローカル全87テストが通過することを確認済み。</td></tr>
-      <tr><th>保守者の落とし穴と対応</th><td>同じ空ID設定をローカルでも使うと、開発者のローカル <code>wrangler deploy</code> も自動プロビジョニングで<b>別のD1を作り本番Choiemuデータから切り離される</b>。対応として、実 <code>database_id</code> を持つ <code>wrangler.local.jsonc</code>（gitignore済み・配布しない）を <code>--config</code> 指定する <code>npm run deploy:cli</code> を追加した。素の <code>npm run deploy</code> は Workers Builds／Deployボタン用、本番への CLI デプロイは <code>deploy:cli</code> を使う。これは §5 の本番 Workers Builds 移行までの<b>移行措置</b>で、移行後は撤去する。</td></tr>
+      <tr><th>対応（実施済み）</th><td><b>本変更で対応済み</b>: ①設定を <code>wrangler.toml</code> → <b><code>wrangler.jsonc</code> へ移行</b>し（自動生成IDの書き戻しが <code>.toml</code> で行われない issue #13632 を回避）、②<code>database_id</code> を<b>記載しない（省略する）</b>ことで自動プロビジョニングを発火させ、③<code>package.json</code> の <code>wrangler</code> 下限を <b><code>^4.102.0</code></b>（PR #14275 初収録版）に引き上げた（id 省略でもバインディング名 <code>DB</code> からUUIDをAPI解決して <code>wrangler d1 migrations apply DB --remote</code> が通る）。lockfile は解決版 <code>4.103.0</code> のまま・スペック文字列のみ手修正し、<code>@emnapi</code> ピン留め（Deployビルド対策）と <code>npm ci</code> 整合を維持。ローカル全87テストが通過することを確認済み。</td></tr>
+      <tr><th>保守者の落とし穴と対応</th><td>同じ <code>database_id</code> 省略設定をローカルでも使うと、開発者のローカル <code>wrangler deploy</code> も自動プロビジョニングで<b>別のD1を作り本番Choiemuデータから切り離される</b>。対応として、実 <code>database_id</code> を持つ <code>wrangler.local.jsonc</code>（gitignore済み・配布しない）を <code>--config</code> 指定する <code>npm run deploy:cli</code> を追加した。素の <code>npm run deploy</code> は Workers Builds／Deployボタン用、本番への CLI デプロイは <code>deploy:cli</code> を使う。これは §5 の本番 Workers Builds 移行までの<b>移行措置</b>で、移行後は撤去する。</td></tr>
       <tr><th>残課題</th><td>Deployボタン配布時の<b>「D1自動生成＋マイグレーション自動適用＋デプロイコマンド」の通し動作</b>の最終確認は、§5 の②検証環境（Workers Builds）または初回実デプロイで行う（<a href="adr/0011-distribution-and-update-model.md">ADR 0011</a> が「未検証」とする項目）。本ガイドはこの通し検証を成立させる前提として <code>database_id</code> 空化・<code>jsonc</code> 化・floor 引き上げを行った。</td></tr>
     </tbody>
   </table>
@@ -341,7 +341,7 @@
   <h2>出典</h2>
   <h3>本リポジトリ</h3>
   <ul class="src">
-    <li><code>wrangler.jsonc</code>（D1バインディング・cron・assets。<code>database_id</code> は空＝自動プロビジョニング用）／ <code>wrangler.local.jsonc</code>（保守者ローカル専用・gitignore）／ <code>package.json</code>（deploy・deploy:cli スクリプト・cloudflare.bindings）</li>
+    <li><code>wrangler.jsonc</code>（D1バインディング・cron・assets。<code>database_id</code> は記載しない＝自動プロビジョニング用）／ <code>wrangler.local.jsonc</code>（保守者ローカル専用・gitignore）／ <code>package.json</code>（deploy・deploy:cli スクリプト・cloudflare.bindings）</li>
     <li><code>setup.html</code>（用意するもの・Deployボタン・Sync fork手順）／ <code>.dev.vars.example</code>（4シークレット）</li>
     <li><a href="adr/0012-three-tier-parity.md">ADR 0012 3層構成と dev/prod parity</a>／ <a href="adr/0011-distribution-and-update-model.md">ADR 0011 配布・更新モデル</a>／ <a href="adr/0008-verify-on-deployed-test-worker.md">ADR 0008 検証はデプロイ済みテスト機で</a>／ <a href="adr/0004-multi-server.md">ADR 0004 マルチサーバー</a></li>
     <li><a href="dev-and-release-flow.md">dev-and-release-flow.md</a>（開発・配信・更新フローの詳細ランブック）</li>
@@ -350,8 +350,8 @@
   <ul class="src">
     <li><a href="https://developers.cloudflare.com/workers/platform/deploy-buttons/">Deploy to Cloudflare buttons</a> — 「デプロイ時に必要リソースをプロビジョニングし、新規リソースのID等で設定を更新する」「マイグレーションはDB名でなくバインディング名を参照せよ」</li>
     <li><a href="https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/">Automatic resource provisioning for KV, R2, and D1（2025-10-24）</a> — 「IDを書かないバインディングを置くと <code>wrangler deploy</code> 時に新規作成・ID書き戻し」</li>
-    <li><a href="https://github.com/cloudflare/workers-sdk/issues/13632">issue #13632</a> — ID省略時に自動生成IDの書き戻しが <code>.toml</code> では行われず、<code>d1 migrations apply</code> が失敗する問題（社内ADRは PR #14275 で「解決済み」と整理。<code>migrations apply</code> 側は #14275 で解決、<code>.toml</code> 書き戻し非対応の側面は残るため <code>jsonc</code> 化が無難）</li>
-    <li><a href="https://github.com/cloudflare/workers-sdk/pull/14275">PR #14275</a>（2026-06-16マージ・<b>wrangler 4.102.0 で初収録</b>）— バインディング名からUUIDをAPI解決し、ID省略でも <code>d1 migrations apply --remote</code> が動く。本プロジェクトの解決版は <code>4.103.0</code> で収録済み</li>
+    <li><a href="https://github.com/cloudflare/workers-sdk/issues/13632">issue #13632</a> — ID省略時に自動生成IDの書き戻しが <code>.toml</code> では行われず、<code>d1 migrations apply</code> が失敗する問題（PR #14275 で <code>d1 migrations apply</code> は config 内の id からバインディング名を解決できるようになったが、<b>未作成のDBを自動生成はしない</b>。よって <code>wrangler deploy</code> を先に実行してD1を自動プロビジョニング＝id を <code>wrangler.jsonc</code> に書き戻し、その後で <code>migrations apply</code> が成功する〔2026-06-20 実機検証〕。<code>.toml</code> 書き戻し非対応の側面も残るため <code>jsonc</code> 化が無難）</li>
+    <li><a href="https://github.com/cloudflare/workers-sdk/pull/14275">PR #14275</a>（2026-06-16マージ・<b>wrangler 4.102.0 で初収録</b>）— config 内の id からバインディング名をAPI解決する。これは「未作成DBの自動生成」ではないため、<code>wrangler deploy</code> がD1を生成して id を書き戻した後に <code>d1 migrations apply --remote</code> が動く。本プロジェクトの解決版は <code>4.103.0</code> で収録済み</li>
     <li><a href="https://developers.cloudflare.com/workers/ci-cd/builds/configuration/">Workers Builds 設定</a> — 既定デプロイコマンドは <code>npx wrangler deploy</code>（カスタマイズ可）</li>
   </ul>
 

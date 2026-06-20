@@ -61,7 +61,7 @@ tests/              vitest（D1 含む）
 
 開発・初回 CLI セットアップ・配信/更新フローは **[docs/dev/dev-and-release-flow.md](docs/dev/dev-and-release-flow.md)** を参照（開発者向けの唯一の手順書）。
 
-- `npm run deploy` = `npm run db:migrate:remote && wrangler deploy`（本番 D1 へマイグレーション適用 → デプロイ）。**本番 Choiemu への操作にあたるため、実行前に必ずユーザー許可を得る。**
+- `npm run deploy` = `wrangler deploy && npm run db:migrate:remote`（先に `wrangler deploy` で D1 を自動作成し id を `wrangler.jsonc` に書き戻す → その後 `db:migrate:remote` が id を解決してマイグレーション適用）。配布用 `wrangler.jsonc` は `database_id` を**記載しない（省略）**前提なので、この順番でないと未作成の D1 にマイグレーションを当てようとして失敗する。**本番 Choiemu への操作にあたるため、実行前に必ずユーザー許可を得る。**
 - マイグレーションはバインディング名 `DB` 指定（`wrangler d1 migrations apply DB --remote`）。配布先の D1 が別名で生成されるため統一。
 
 ## ⚙️ シークレット
