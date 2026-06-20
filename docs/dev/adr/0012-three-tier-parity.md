@@ -22,7 +22,7 @@
 - **昇格パイプライン**: ① ローカルで実装・`npm test` → `staging` へ push → ② で Workers Builds が自動デプロイ・検証 → `main` へ昇格（③へ反映）。
 - **配布用設定の前提を満たす。** `wrangler.jsonc` の `database_id` を空にし（自動プロビジョニング発火）、`wrangler` 下限を `^4.102.0`（PR #14275 初収録版）に固定する。これにより②で本番と同条件の通し動作（D1 自動生成＋マイグレーション自動適用＋デプロイコマンド）を**本番に触れずに検証**できる。
 - **ローカル CLI リモートデプロイは移行措置として残し、最終的に撤去する。** 本番が Workers Builds に乗るまでは、保守者は実 `database_id` を持つ `wrangler.local.jsonc`（gitignore 済み）を `--config` 指定する `npm run deploy:cli` で本番へデプロイする。本番が Workers Builds に移行したら `deploy:cli` と `wrangler.local.jsonc` は撤去する。
-- **利用者が必要とする外部アカウントは Discord・Cloudflare・GitHub の3つ**（いずれも無料枠）と明文化する。GitHub は Deploy ボタンの動力源（公開リポジトリ）と更新（fork の Sync fork）に使うため省略不可。
+- **利用者が必要とする外部アカウントは Discord・Cloudflare・GitHub の3つ**（いずれも無料枠）と明文化する。GitHub は公開リポジトリの **Fork**（Cloudflare Workers Builds に接続）と更新（fork の **Sync fork**）に使うため省略不可（案B・[ADR 0011 追補](0011-distribution-and-update-model.md)）。
 
 ## 根拠
 

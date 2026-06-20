@@ -1,5 +1,5 @@
 {
-  // 配布用の Cloudflare 設定（JSONC）。「Deploy to Cloudflare」ボタン／Workers Builds が
+  // 配布用の Cloudflare 設定（JSONC）。利用者の fork を接続した Cloudflare Workers Builds が
   // このファイルを読む。JSON 形式なのは、自動生成された database_id の「書き戻し」が
   // .toml では行われない問題（workers-sdk issue #13632）を避けるため。
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -37,7 +37,7 @@
     "not_found_handling": "single-page-application"
   }
 
-  // シークレットは Deploy ボタンの入力欄、または wrangler secret put で設定（コミットしない）:
+  // シークレットは Worker の Variables and Secrets、または wrangler secret put で設定（コミットしない）:
   //   DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID / DISCORD_BOT_TOKEN / ADMIN_TOKEN
   // ※ 投稿チャンネルは Notification ごとに DB で持つため、単一の DISCORD_CHANNEL_ID は廃止。
 }

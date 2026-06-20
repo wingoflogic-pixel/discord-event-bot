@@ -63,6 +63,11 @@
   <h1>配信と利用環境ガイド</h1>
   <p class="lead">「<b>開発者のテスト環境（staging）</b>」「<b>開発者の本番環境（Choiemu）</b>」「<b>ユーザーの本番環境</b>」の3つがどう違い・どうつながるのか、ユーザーがどうセットアップするのか、データベース（D1）はどう立つのかを、図とともに要点解説する文書です。3環境はいずれも「公開GitHub → Cloudflare Workers Builds」で動きます（<a href="adr/0012-three-tier-parity.md">ADR 0012</a>）。出典は本リポジトリの設定ファイル・ADR と Cloudflare 公式ドキュメント（末尾に一覧）。Cloudflare の挙動に関する記述は公式ドキュメント・GitHub で確認したものですが、配布の通し挙動の最終確認は実デプロイで行う前提です。</p>
 
+  <div class="callout warn">
+    <p class="t">この文書の更新状況（2026-06-20）</p>
+    <p>ユーザーの初回セットアップ手段を <b>「Deploy to Cloudflare ボタン」から「公開リポジトリを Fork → Cloudflare Workers Builds に接続」へ変更</b>しました（案B・<a href="adr/0011-distribution-and-update-model.md">ADR 0011 追補</a>）。理由は、Deploy ボタンが作るのは fork ではなく clone で、更新の「Sync fork」が使えないためです。<b>本文の §2・§3 は旧（Deploy ボタン前提）の記述が残っており、別途改訂予定（タスク B-6）</b>です。最新の正は <code>setup.html</code>・<a href="adr/0011-distribution-and-update-model.md">ADR 0011 追補</a> を参照してください。</p>
+  </div>
+
   <h2>1. 全体像：開発と3つの環境</h2>
   <p>登場するのは <b>開発者のローカル（開発の起点）</b> と、そこから公開GitHub経由でデプロイされる<b>3つの環境</b>です ── <b>② 開発者のテスト環境（staging）</b>／<b>③ 開発者の本番環境（Choiemu）</b>／<b>④ ユーザーの本番環境</b>。<a href="adr/0012-three-tier-parity.md">ADR 0012</a> の方針では、この3環境はすべて同じ <b>「公開GitHub → Cloudflare Workers Builds」</b> 経路で動きます（＝デプロイ機構が同一＝環境差が出ない）。違いは「どのブランチ/forkを見るか」と「どのDiscord・データに繋がるか」だけです。</p>
 

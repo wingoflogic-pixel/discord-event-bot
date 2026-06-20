@@ -4,7 +4,7 @@
 
 リポジトリ構成は、実装が `src/`、管理 UI が `ui/`、スキーマのマイグレーションが `migrations/`、配布アシスタント（利用者向けセットアップページ）が `setup.html`（リポジトリ直下）である。言語は日本語。
 
-なお非エンジニアの利用者は CLI を使わず、BOOTH で受け取った `setup.html` から「Deploy to Cloudflare」ボタンでセットアップする（[配信フロー](#配信フロー)参照）。更新は自分の GitHub fork で「Sync fork」を押すだけで完結する（CLI 不要・Workers Builds が自動再デプロイ）。本書は**保守者／開発者が CLI で環境を立ち上げる**ための手順書である。データモデル（Server ＞ Notification → Segment ＞ Occurrence）の用語は [`CONTEXT.md`](CONTEXT.md)、設計は [`docs/dev/adr/`](adr) と [`docs/dev/IMPLEMENTATION-CONTRACT.md`](IMPLEMENTATION-CONTRACT.md) を参照。言語=日本語固定／時刻=JST固定／マルチサーバー（テナント分離なし・単一 `ADMIN_TOKEN`）。
+なお非エンジニアの利用者は CLI を使わず、BOOTH で受け取った `setup.html` の案内に沿って**公開リポジトリを Fork → Cloudflare Workers Builds に接続**してセットアップする（[配信フロー](#配信フロー)参照・案B）。更新は自分の GitHub fork で「Sync fork」を押すだけで完結する（CLI 不要・Workers Builds が自動再デプロイ）。本書は**保守者／開発者が CLI で環境を立ち上げる**ための手順書である。データモデル（Server ＞ Notification → Segment ＞ Occurrence）の用語は [`CONTEXT.md`](CONTEXT.md)、設計は [`docs/dev/adr/`](adr) と [`docs/dev/IMPLEMENTATION-CONTRACT.md`](IMPLEMENTATION-CONTRACT.md) を参照。言語=日本語固定／時刻=JST固定／マルチサーバー（テナント分離なし・単一 `ADMIN_TOKEN`）。
 
 ---
 
@@ -14,8 +14,8 @@
 
 ### 0. 前提
 
-- Node.js 18 以上（`package.json` の `engines` は `>=18.0.0`）。
-- **GitHub アカウント**（fork を作成し、Sync fork で更新を受け取るため。公開リポジトリは Deploy ボタンの動力源で廃止不可）。
+- Node.js は `.node-version` で **22.16.0 を固定**（Workers Builds の `npm ci` 整合のため。`package.json` の `engines` 下限は `>=18.0.0`）。
+- **GitHub アカウント**（公開リポジトリを fork して Cloudflare Workers Builds に接続し、Sync fork で更新を受け取るため。公開リポジトリは fork 元かつ Sync fork の upstream で廃止不可）。
 - Cloudflare アカウント（無料枠で可）。
 - Discord アプリ（Developer Portal）— Bot Token / Application ID / Public Key を取得済みであること。
 
@@ -37,7 +37,7 @@ wrangler login            # ブラウザで Cloudflare にログイン
 wrangler d1 create choiemu-event-bot-db   # 名前は任意
 ```
 
-出力された `database_id` は、**配布用の `wrangler.jsonc` ではなく `wrangler.local.jsonc`（gitignore 済み・保守者ローカル専用）の `database_id`** に貼り付ける。配布用 `wrangler.jsonc` の `database_id` は**空のまま**にしておくこと（空にしておくと「Deploy to Cloudflare」ボタンが利用者のアカウントに D1 を自動生成する。ベタ書きすると自動生成がスキップされ利用者のデプロイが失敗する。理由は[配布用設定は database_id を空にする](#配布用設定は-database_id-を空にする)を参照）。`d1_databases` の **バインディング名は `DB`** のままにすること（マイグレーション・デプロイのスクリプトがバインディング名 `DB` を前提にしている。理由は[バインディング名 DB を指定する理由](#バインディング名-db-を指定する理由issue-13632--pr-14275)を参照）。
+出力された `database_id` は、**配布用の `wrangler.jsonc` ではなく `wrangler.local.jsonc`（gitignore 済み・保守者ローカル専用）の `database_id`** に貼り付ける。配布用 `wrangler.jsonc` の `database_id` は**空のまま**にしておくこと（空にしておくと、利用者の fork を接続した Workers Builds が利用者のアカウントに D1 を自動生成する。ベタ書きすると自動生成がスキップされ利用者のデプロイが失敗する。理由は[配布用設定は database_id を空にする](#配布用設定は-database_id-を空にする)を参照）。`d1_databases` の **バインディング名は `DB`** のままにすること（マイグレーション・デプロイのスクリプトがバインディング名 `DB` を前提にしている。理由は[バインディング名 DB を指定する理由](#バインディング名-db-を指定する理由issue-13632--pr-14275)を参照）。
 
 ### 3. スキーマ適用（初回マイグレーション）
 
@@ -46,7 +46,7 @@ npm run db:migrate:local    # = wrangler d1 migrations apply DB --local（ロー
 npm run db:migrate:remote   # = wrangler d1 migrations apply DB --remote（本番 D1。本番操作・要ユーザー許可）
 ```
 
-`migrations/` の連番を順に適用し、`d1_migrations` テーブルで適用済みが管理される。マイグレーションの追記・編集ルールは[マイグレーション追記手順](#マイグレーション追記手順)を、`db:migrate:remote` が本番 D1 を触ることについては[npm run deploy の本番マイグレーション挙動](#npm-run-deploy-の本番マイグレーション挙動要ユーザー許可)を参照（後述の `npm run deploy` が `db:migrate:remote` を内包するため、初回デプロイだけなら手動の `db:migrate:remote` は省略してもよい）。
+`migrations/` の連番を順に適用し、`d1_migrations` テーブルで適用済みが管理される。マイグレーションの追記・編集ルールは[マイグレーション追記手順](#マイグレーション追記手順)を、`db:migrate:remote` が本番 D1 を触ることについては[npm run deploy / deploy:cli の本番マイグレーション挙動](#npm-run-deploy--deploycli-の本番マイグレーション挙動要ユーザー許可)を参照（後述の `npm run deploy` が `db:migrate:remote` を内包するため、初回デプロイだけなら手動の `db:migrate:remote` は省略してもよい）。
 
 ### 4. シークレット設定（4つ）
 
@@ -79,16 +79,16 @@ npm run deploy:cli
 #   && wrangler deploy --config wrangler.local.jsonc
 ```
 
-配布用 `wrangler.jsonc` は `database_id` が空のため、素の `npm run deploy`（`--config` 無し）をローカルで実行すると**本番とは別の新しい D1 を自動生成してしまう**（本番 Choiemu データから切り離される）。素の `npm run deploy` は **Workers Builds／Deploy ボタン側が実行する用**で、ローカルからの本番デプロイには使わない。詳細は[配布用設定は database_id を空にする](#配布用設定は-database_id-を空にする)を参照。
+配布用 `wrangler.jsonc` は `database_id` が空のため、素の `npm run deploy`（`--config` 無し）をローカルで実行すると**本番とは別の新しい D1 を自動生成してしまう**（本番 Choiemu データから切り離される）。素の `npm run deploy` は **Workers Builds 側が実行する用**（利用者の fork 接続・開発者の staging/prod）で、ローカルからの本番デプロイには使わない。詳細は[配布用設定は database_id を空にする](#配布用設定は-database_id-を空にする)を参照。
 
-`deploy:cli` も**本番 D1 へマイグレーションを適用してからデプロイ**する。本番 Choiemu 操作にあたるため、実行前に必ずユーザーの明示的な許可を得ること（詳細は[npm run deploy の本番マイグレーション挙動](#npm-run-deploy-の本番マイグレーション挙動要ユーザー許可)）。出力される URL（例 `https://discord-event-bot.<account>.workers.dev`）を控える。
+`deploy:cli` も**本番 D1 へマイグレーションを適用してからデプロイ**する。本番 Choiemu 操作にあたるため、実行前に必ずユーザーの明示的な許可を得ること（詳細は[npm run deploy / deploy:cli の本番マイグレーション挙動](#npm-run-deploy--deploycli-の本番マイグレーション挙動要ユーザー許可)）。出力される URL（例 `https://discord-event-bot.<account>.workers.dev`）を控える。
 
 > **方針（[ADR 0012](adr/0012-three-tier-parity.md)）**: 本番も検証も最終的には GitHub→Cloudflare（Workers Builds）経路に寄せ、ローカルからの CLI リモートデプロイ（`deploy:cli`）は撤去する。`deploy:cli` は Workers Builds 本番が立ち上がるまでの**移行措置**である。
 
 ### 7. Discord 側の設定
 
 - Developer Portal → アプリ → **Interactions Endpoint URL** に `https://<worker-url>/interactions` を設定（保存時に Discord が PING 検証）。
-- Developer Portal → **Bot → Privileged Gateway Intents → Server Members Intent を有効化**（管理 UI のメンバーピッカーが参加者一覧を取得するため・[ADR 0006](adr/0006-discord-as-source-of-truth.md)）。
+- Developer Portal → **Bot → Privileged Gateway Intents → Server Members Intent を有効化**（管理 UI のメンバーピッカーが参加者一覧を取得するため・[ADR 0006](adr/0006-member-three-layers.md)）。
 - Bot をサーバーに招待する（**`bot` ＋ `applications.commands` の両スコープ**。メッセージ送信・DM 権限）。
 
 ### 8. 管理 UI で初期設定
@@ -103,7 +103,7 @@ npm run db:migrate:local
 npm run dev                      # = wrangler dev（ローカル D1）
 ```
 
-`.dev.vars` には**テスト用 Discord アプリ＋ダミーサーバーの値のみ**を置く。本番値の混入は厳禁（`wrangler` v4 は `.env` を自動読込し、本番値が紛れ込むと本番チャンネルへ投稿しうる）。安全モデルの詳細は[.dev.vars の安全モデル](#dev-vars-の安全モデル)を参照。
+`.dev.vars` には**テスト用 Discord アプリ＋ダミーサーバーの値のみ**を置く。本番値の混入は厳禁（`wrangler` v4 は `.env` を自動読込し、本番値が紛れ込むと本番チャンネルへ投稿しうる）。安全モデルの詳細は[.dev.vars の安全モデル](#devvars-の安全モデル)を参照。
 
 Discord インタラクションのローカル検証は、cloudflared トンネル経由で**本番とは別のテスト用 Discord アプリ**の Interaction Endpoint に向ける:
 
@@ -171,19 +171,21 @@ npm run typecheck # = tsc --noEmit
 ### BOOTH 入口と GitHub 基盤の役割分担
 
 - **BOOTH ＝入口**。VRChat 層になじみ深い配布チャネルとして、利用者が最初に触れる場所。**配布物は `setup.html` 単体**（下記「配布物の定義」参照）。
-- **公開 GitHub リポジトリ ＝基盤**。「Deploy to Cloudflare」ボタンの動力源。
+- **公開 GitHub リポジトリ ＝基盤**。利用者が **Fork** して Cloudflare Workers Builds に接続する「fork 元」であり、更新（Sync fork）の upstream でもある（[ADR 0011 追補](adr/0011-distribution-and-update-model.md) の案B）。
 
 ### GitHub を消せない理由
 
-- 「Deploy to Cloudflare」ボタンは**公開 git リポジトリを参照**して動く。BOOTH は git ホスティングではないため、ボタンの参照先になれない。
-- したがって公開 GitHub リポジトリは**廃止できない**。ただし利用者は GitHub の UI を直接触る必要はなく、BOOTH で受け取った `setup.html` 経由でデプロイを進める。
+- 利用者は公開リポジトリを **Fork** し、その fork を Cloudflare Workers Builds に接続（ダッシュボード **Workers & Pages → Create → Import a repository**）してデプロイする。BOOTH は git ホスティングではないため fork 元になれない。
+- 更新は GitHub 純正の **「Sync fork」**（fork の upstream＝公開リポジトリから取り込む）で回す。**fork 元としても upstream としても公開 GitHub リポジトリは廃止できない**。
+- 利用者は `setup.html` の案内に沿って **GitHub（Fork・Sync fork）と Cloudflare ダッシュボード**を操作する（いずれも Web・CLI 不要）。
+- 補足: 「Deploy to Cloudflare」ボタンは**採用しない**。ボタンは fork ではなく clone を作り、純正「Sync fork」が使えず更新が回らないため（[ADR 0011 追補](adr/0011-distribution-and-update-model.md)）。
 
 ### 配布物の定義（唯一の正）
 
 - **BOOTH 配布物 = `setup.html` 単体のみ**。`setup.html` は自己完結 HTML（画像・外部依存なし）なので **zip すら不要**で、ファイル 1 つをそのまま配布できる。
 - 配布物を増やす（例: 補足 PDF を添える）場合は、**必ずこの節と `.claude/rules/dev-and-release.md` の定義を同時に更新**してから増やす。ここを配布内容の唯一の正とする。
 - `setup.html` は、`ADMIN_TOKEN` 用のパスワード生成や、デプロイ手順への導線を提供する（`package.json` の `cloudflare.bindings` 説明文と対応）。
-- 利用者が必要とするソース一式は **Deploy ボタン経由で公開リポジトリから取得**されるため、配布物にソース（`src/` 等）を同梱する必要はない。
+- 利用者が必要とするソース一式は **fork（公開リポジトリの複製）として利用者の GitHub に入る**ため、配布物にソース（`src/` 等）を同梱する必要はない。
 
 ### zip 衛生
 
@@ -239,13 +241,13 @@ deploy スクリプト（npm run deploy）が自動実行:
 
 ### 配布用設定は database_id を空にする
 
-- 配布用 `wrangler.jsonc` の `d1_databases[].database_id` は**空文字**にしてある。Cloudflare の自動プロビジョニング（2025-10-24〜）は「id の無い／空のバインディング＝新規作成」とみなし、「Deploy to Cloudflare」ボタンで利用者のアカウントに D1 を自動生成する。実 `database_id` をベタ書きすると、そのリソースは利用者のアカウントに存在しないため自動生成がスキップされ、**利用者のデプロイが失敗する**。
+- 配布用 `wrangler.jsonc` の `d1_databases[].database_id` は**空文字**にしてある。Cloudflare の自動プロビジョニング（2025-10-24〜）は「id の無い／空のバインディング＝新規作成」とみなし、利用者の fork を接続した Workers Builds が利用者のアカウントに D1 を自動生成する。実 `database_id` をベタ書きすると、そのリソースは利用者のアカウントに存在しないため自動生成がスキップされ、**利用者のデプロイが失敗する**。
 - 自動生成された id の「書き戻し」が `.toml` では行われない（workers-sdk issue #13632）ため、設定ファイルは **`wrangler.jsonc`（JSON 形式）** にしている。
 - **保守者の落とし穴**: 同じ空 `database_id` の設定をローカルでも使うと、ローカルからの `wrangler deploy` も自動プロビジョニングで**本番とは別の D1 を作ってしまう**。保守者が本番 Choiemu へ CLI デプロイするときは、実 `database_id` を持つ `wrangler.local.jsonc`（gitignore 済み）を `--config` で指定する **`npm run deploy:cli`** を使う。
 
 ### npm run deploy / deploy:cli の本番マイグレーション挙動（要ユーザー許可）
 
-- 素の `npm run deploy`（`"npm run db:migrate:remote && wrangler deploy"`）は **Workers Builds／Deploy ボタンが実行する用**。ローカルから素で実行すると上記のとおり別 D1 を作るため、ローカルからの本番デプロイには使わない。
+- 素の `npm run deploy`（`"npm run db:migrate:remote && wrangler deploy"`）は **Workers Builds が実行する用**（利用者の fork 接続・開発者の staging/prod）。ローカルから素で実行すると上記のとおり別 D1 を作るため、ローカルからの本番デプロイには使わない。
 - 保守者がローカル CLI から本番 Choiemu へデプロイするときは **`npm run deploy:cli`**（`wrangler.local.jsonc` を `--config` 指定）を使う。これも **本番 D1 へマイグレーションを適用してからデプロイする**。
 - `--remote` は本番（リモート）D1 を対象とする。これは本番 Choiemu 操作にあたるため、[CLAUDE.md](../CLAUDE.md) のルールに従い、**実行前に必ずユーザーの明示的な許可を得る**こと。
 - 開発中にスキーマを試すときは、本番ではなく `npm run db:migrate:local`（`--local`）を使う。
@@ -253,17 +255,17 @@ deploy スクリプト（npm run deploy）が自動実行:
 ### バインディング名 DB を指定する理由（issue #13632 → PR #14275）
 
 - マイグレーションコマンドは「データベース名」ではなく「**バインディング名 `DB`**」で指定している（`wrangler d1 migrations apply DB --remote` / `--local`）。
-- 理由: 「Deploy to Cloudflare」ボタンで配布すると、各利用者の D1 は**別名で自動生成**される。データベース名で指定すると利用者ごとに名前が異なって動かないが、**バインディング名は全環境で `DB` に揃う**ため、同じスクリプトがそのまま動く。これは Cloudflare 公式推奨の方式で、関連 issue #13632 は PR #14275 で解決済み。
+- 理由: 利用者が fork を Workers Builds に接続してデプロイすると、各利用者の D1 は**自動生成**される（名前は環境依存）。データベース名で指定すると利用者ごとに名前が異なって動かないが、**バインディング名は全環境で `DB` に揃う**ため、同じスクリプトがそのまま動く。これは Cloudflare 公式推奨の方式で、関連 issue #13632 は PR #14275 で解決済み。
 - `database_id` を空にしてもバインディング名 `DB` から UUID を API 解決して `wrangler d1 migrations apply DB --remote` が通るのは PR #14275（**wrangler 4.102.0 で初収録**）以降。このため `package.json` の `wrangler` 下限は **`^4.102.0`** に固定している（4.101.x へ戻ると空 id でマイグレーションが解決できない）。`package.json` を変更する際は `@emnapi` ピン留め（Deploy ビルド対策）を崩さないよう、lockfile は npm10 で扱うこと。
 
-### Deploy ボタンのシークレット入力
+### 利用者のシークレット入力（fork 接続）
 
-- 「Deploy to Cloudflare」ボタンは、`.dev.vars.example` のシークレット名（4つ: `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` / `DISCORD_BOT_TOKEN` / `ADMIN_TOKEN`）と、`package.json` の `cloudflare.bindings` 説明文をもとに、デプロイ時に**シークレット入力欄**を出す。利用者はここに各値を貼り付けてデプロイする。
+- 利用者は fork を Workers Builds に接続後、Worker の **Settings → Variables and Secrets** で4つのシークレット（`DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` / `DISCORD_BOT_TOKEN` / `ADMIN_TOKEN`・`.dev.vars.example` と一致）を設定する（接続フローで環境変数欄が出ればそこでも可）。`package.json` の `cloudflare.bindings` は各シークレットの説明文の出所。
 
-### Deploy ボタンの実挙動は初回公開デプロイで最終確認
+### 案Bの実挙動は実機スモークテストで最終確認
 
-- Deploy ボタン経由でのマイグレーション自動適用の**最終的な実挙動**は、リポジトリを公開して**初回の実デプロイ**で確認する。
-- 設定は公式どおりで、ローカルでのバインディング解決（バインディング名 `DB` で当たること）は確認済み。残るのは「配布先の自動生成 D1 に対して初回デプロイ時にマイグレーションが正しく走るか」の実地確認のみで、これは初回公開デプロイをもって締める。
+- fork 接続経由での「**D1 自動生成＋マイグレーション自動適用＋Sync fork での再デプロイ＋既存 D1 の再利用（データ保全）**」の通し動作は、捨てデータでの**実機スモークテスト**（または初回公開デプロイ）で締める。詳細は [タスクリスト.md](タスクリスト.md) の B-1。
+- 文書上の成立はバインディング名 `DB` 解決・自動プロビジョニングの「紐付け維持」・純正 Sync fork 仕様から確認済み（出典は [distribution-and-environments.html](distribution-and-environments.html) 末尾）。残るは上記の実地確認のみ。
 
 ---
 
