@@ -6,7 +6,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "npm run db:migrate:remote && wrangler deploy",
+    "deploy": "wrangler deploy && npm run db:migrate:remote",
     "deploy:cli": "wrangler d1 migrations apply DB --remote --config wrangler.local.jsonc && wrangler deploy --config wrangler.local.jsonc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
