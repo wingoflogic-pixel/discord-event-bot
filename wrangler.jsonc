@@ -12,9 +12,10 @@
   "compatibility_flags": ["nodejs_compat"],
 
   // --- D1 データベース ---
-  // database_id は「空」にしておく。Cloudflare の自動プロビジョニング（2025-10-24〜）は
-  // 「id の無い／空のバインディング＝新規作成」とみなし、利用者のアカウントに D1 を自動生成する。
-  // マイグレーションはバインディング名 "DB" で解決する（wrangler 4.102.0+ / PR #14275）。
+  // database_id は「記載しない（省略）」。Cloudflare の自動プロビジョニング（2025-10-24〜）は
+  // 「id の無いバインディング＝新規作成」とみなし、利用者のアカウントに D1 を自動生成する。
+  // ※ wrangler deploy が作成後に database_id を JSONC へ書き戻す → その後 migrations が解決できる。
+  //    そのため deploy スクリプトは「deploy → migrations」の順にする（workers-sdk issue #13632）。
   // ※ 保守者がローカル CLI から本番 Choiemu へデプロイするときは、実 database_id を持つ
   //    wrangler.local.jsonc（gitignore 済み）を使う（package.json の deploy:cli）。理由は
   //    docs/dev/distribution-and-environments.html §4 リスク① / §5 を参照。
@@ -22,7 +23,6 @@
     {
       "binding": "DB",
       "database_name": "choiemu-event-bot-db-staging",
-      "database_id": "",
       "migrations_dir": "migrations"
     }
   ],
