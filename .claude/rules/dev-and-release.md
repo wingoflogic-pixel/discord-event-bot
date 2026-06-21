@@ -32,8 +32,8 @@ paths:
 - **方針（ADR 0012）**: 本番・検証とも最終的に GitHub→Cloudflare（Workers Builds）経路へ寄せ、`deploy:cli`（ローカルCLIリモートデプロイ）は Workers Builds 本番の立ち上げ後に撤去する移行措置。
 
 ## 配信・更新
-- 配布チャネル: **BOOTH＝入口**。公開GitHubリポジトリ＝利用者が **Fork して Workers Builds に接続する元**かつ **Sync fork の upstream** で廃止不可。利用者の初回は「Fork → ダッシュボードで Import a repository → Deploy command を `npm run deploy` に設定 → デプロイ（D1自動生成＋migrate）→ シークレット4つ設定」。「Deploy to Cloudflare」ボタンは不採用（clone＝Sync fork不可）。
-- **BOOTH配布物の定義（唯一の正）**: `setup.html` **単体のみ**（自己完結HTMLのためzip不要）。配布物を増やす場合は必ずこの行を更新する。`.env` / `.dev.vars` / `node_modules` / 実トークン / `src/` 等のソースは**絶対に同梱しない**（利用者は公開リポジトリを fork して取得する）。
+- 配布チャネル: **BOOTH＝入口**。公開GitHubリポジトリ＝利用者が **Fork して Workers Builds に接続する元**かつ **Sync fork の upstream** で廃止不可。利用者の初回は「Fork → ダッシュボードで **Create application → Continue with GitHub** → 一覧から fork を選択 → **Deploy command を `npm run deploy` に変更** → **Deploy**（D1自動生成＋migrate）→ **Settings → Variables and secrets** でシークレット4つ設定」。「Deploy to Cloudflare」ボタンは不採用（clone＝Sync fork不可）。※ Cloudflare の作成画面UIは変わりやすいので、`setup.html` 改訂時は実画面で文言を再確認する（旧称「Import a repository / Get started / Save and Deploy」は現行「Continue with GitHub / Deploy」に置き換わっている）。
+- **BOOTH配布物の定義（唯一の正）**: `setup.html` **単体のみ**（自己完結HTML・外部依存なしのため zip 不要）。配布物を増やす場合は必ずこの行を更新する。**`setup.html` は手順説明の実画面スクリーンショットを base64 でインライン埋め込みする**（外部画像ファイルは持たない＝配布物は単体ファイルのまま）。編集ソースは `setup.src.html`（`@@name@@` プレースホルダを手編集）で、`node scripts/build-setup-html.mjs` が `.captures/<name>.png` を base64 注入して `setup.html` を生成する（生成物の `setup.html` をコミット）。元スクショ置き場 `.captures/` は**生の機微情報（トークン・アプリID・公開キー・worker URL・非公開リポ名・アカウント等）を含むため非コミット**（配布画像では目隠しを画像へ焼き込み済み・CSS被せだけにしない）。`.env` / `.dev.vars` / `node_modules` / 実トークン / `src/` 等のソースは**絶対に同梱しない**（利用者は公開リポジトリを fork して取得する）。
 - 更新: 利用者は自分の GitHub fork で「Sync fork」を押すだけ → Cloudflare Workers Builds が push ごとに deploy を実行 → マイグレーション適用＋デプロイが自動。利用者は **CLI 不要・GitHub アカウントのみ必須**。
 - リリース時は package.json の version を semver で更新し、日本語リリースノートで「DB変更あり/なし」を明示する。
 - zip衛生: 配布zipに `.env` / `.dev.vars` / `node_modules` / 実トークンを絶対に含めない。

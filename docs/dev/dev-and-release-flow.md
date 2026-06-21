@@ -175,15 +175,16 @@ npm run typecheck # = tsc --noEmit
 
 ### GitHub を消せない理由
 
-- 利用者は公開リポジトリを **Fork** し、その fork を Cloudflare Workers Builds に接続（ダッシュボード **Workers & Pages → Create → Import a repository**）してデプロイする。BOOTH は git ホスティングではないため fork 元になれない。
+- 利用者は公開リポジトリを **Fork** し、その fork を Cloudflare Workers Builds に接続（ダッシュボード **Workers & Pages → Create application → Continue with GitHub → 一覧から fork を選択 → Deploy command を `npm run deploy` に変更 → Deploy**）してデプロイする。BOOTH は git ホスティングではないため fork 元になれない。※ Cloudflare 作成UIの文言は変わりやすい（旧称「Import a repository / Get started / Save and Deploy」→ 現行「Continue with GitHub / Deploy」）。
 - 更新は GitHub 純正の **「Sync fork」**（fork の upstream＝公開リポジトリから取り込む）で回す。**fork 元としても upstream としても公開 GitHub リポジトリは廃止できない**。
 - 利用者は `setup.html` の案内に沿って **GitHub（Fork・Sync fork）と Cloudflare ダッシュボード**を操作する（いずれも Web・CLI 不要）。
 - 補足: 「Deploy to Cloudflare」ボタンは**採用しない**。ボタンは fork ではなく clone を作り、純正「Sync fork」が使えず更新が回らないため（[ADR 0011 追補](adr/0011-distribution-and-update-model.md)）。
 
 ### 配布物の定義（唯一の正）
 
-- **BOOTH 配布物 = `setup.html` 単体のみ**。`setup.html` は自己完結 HTML（画像・外部依存なし）なので **zip すら不要**で、ファイル 1 つをそのまま配布できる。
-- 配布物を増やす（例: 補足 PDF を添える）場合は、**必ずこの節と `.claude/rules/dev-and-release.md` の定義を同時に更新**してから増やす。ここを配布内容の唯一の正とする。
+- **BOOTH 配布物 = `setup.html` 単体のみ**。`setup.html` は **自己完結 HTML（外部ファイル依存なし）** なので **zip すら不要**で、ファイル 1 つをそのまま配布できる。手順説明の**実画面スクリーンショットは base64 でインライン埋め込み**しており、外部画像を持たない（＝単体ファイルのまま。ファイルサイズは約 1MB 前後）。
+- **ビルド手順**: 編集ソースは `setup.src.html`（画像箇所は `@@name@@` プレースホルダ）。`node scripts/build-setup-html.mjs` が `.captures/<name>.png` を base64 注入して `setup.html` を生成する。**コミットするのは生成物 `setup.html` と `setup.src.html`**。元スクショ `.captures/` は**生の機微情報（トークン・アプリID・公開キー・worker URL・非公開リポ名・アカウント等）を含むため非コミット**（`.gitignore` 済み）。配布画像の目隠しは `.captures/redact.ps1` で**画像へ焼き込む**（CSS で被せるだけだと base64 内に実値が残り漏れるため不可）。
+- 配布物を増やす（例: 補足 PDF を添える）場合や**外部画像を持つ方式に変える**場合は、**必ずこの節と `.claude/rules/dev-and-release.md` の定義を同時に更新**してから変える。ここを配布内容の唯一の正とする。
 - `setup.html` は、`ADMIN_TOKEN` 用のパスワード生成や、デプロイ手順への導線を提供する（`package.json` の `cloudflare.bindings` 説明文と対応）。
 - 利用者が必要とするソース一式は **fork（公開リポジトリの複製）として利用者の GitHub に入る**ため、配布物にソース（`src/` 等）を同梱する必要はない。
 
