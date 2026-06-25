@@ -242,6 +242,21 @@
       .muted { color: var(--muted); }
       .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
       
+      /* ---------- Form: 必須マーク / 折りたたみ / サブ見出し（通知オーバーホール）---------- */
+      .req { color: var(--danger); margin-left: 2px; font-weight: 700; }
+      .subhead { color: var(--text); font-weight: 700; font-size: 13px; margin: 18px 0 4px; letter-spacing: .02em; }
+      details.section { border: 1px solid var(--border); border-radius: var(--r); background: var(--panel); margin: 14px 0; }
+      details.section > summary {
+        list-style: none; cursor: pointer; padding: 12px 14px; font-weight: 700; color: var(--text);
+        display: flex; align-items: center; gap: 8px; user-select: none; border-radius: var(--r);
+      }
+      details.section > summary::-webkit-details-marker { display: none; }
+      details.section > summary::before { content: "▶"; color: var(--muted); font-size: 11px; transition: transform .15s ease; }
+      details.section[open] > summary::before { transform: rotate(90deg); }
+      details.section > summary:hover { background: var(--panel2); }
+      details.section > summary:focus-visible { outline: none; box-shadow: var(--ring); }
+      details.section > .section-body { padding: 2px 14px 14px; }
+      
       /* ---------- Containers: fieldset ---------- */
       fieldset { border: 1px solid var(--border); border-radius: var(--r); margin: 14px 0; padding: 14px 16px; background: var(--panel); }
       legend { color: var(--text); padding: 0 8px; font-weight: 600; }
@@ -378,6 +393,7 @@
         .ws-layout > .server-rail .server-rail-divider { width: 2px; height: 32px; margin: 0 2px; }
       }
     </style>
+  <script src="/eventbot-tables.js"></script>
   </head>
   <body>
     <!-- トークンゲート -->
@@ -422,12 +438,14 @@
           <div class="navitem active" data-sec="notifications">🔔 通知</div>
           <div class="navitem" data-sec="segments">👥 メンバー区分</div>
           <div class="navitem" data-sec="records">🗒 回答履歴</div>
+          <div class="navitem" data-sec="sendlog">📤 送信履歴</div>
           <div class="navitem" data-sec="setup">⚙️ セットアップ</div>
         </nav>
         <main>
           <section id="sec-notifications"></section>
           <section id="sec-segments" class="hidden"></section>
           <section id="sec-records" class="hidden"></section>
+          <section id="sec-sendlog" class="hidden"></section>
           <section id="sec-setup" class="hidden"></section>
         </main>
       </div>
@@ -585,7 +603,7 @@
 
       // ================= ナビ =================
       const SECTIONS = ['notifications', 'segments', 'records', 'setup'];
-      const LOADERS = { notifications: loadNotifications, segments: loadSegments, records: loadRecords, setup: loadSetup };
+      const LOADERS = { notifications: loadNotifications, segments: loadSegments, records: loadRecords, sendlog: loadSendLog, setup: loadSetup };
       function switchSection(sec) {
         document.querySelectorAll('.side .navitem').forEach((x) => x.classList.toggle('active', x.dataset.sec === sec));
         SECTIONS.forEach((s) => $('#sec-' + s).classList.toggle('hidden', s !== sec));
@@ -794,6 +812,17 @@
 
       // ================= 通知 =================
       let cacheChannels = [], cacheSegments = [], cacheNotifs = [];
+      function estimateBanner(est) {
+        const over = est.overDaily || est.overWindow;
+        return `<div class="alert ${over ? 'warn' : ''}" style="margin-bottom:14px">
+          <div class="alert-icon">${over ? '⚠️' : '📊'}</div>
+          <div><div style="font-weight:600">送信量の目安（無料枠の推奨上限・⑦）</div>
+          <div class="muted" style="font-size:12.5px;margin-top:2px">
+            推定ピーク: <b>${est.dailyTotal}</b> 件/日（同一送信時刻 最大 <b>${est.maxWindow}</b> 件）／
+            推奨: 日次 ≤ ${est.recommendedDaily}・同一時刻 ≤ ${est.recommendedPerWindow}（送信予算 ${est.budget}/分）。
+            ${over ? '<b style="color:var(--warn)">推奨上限を超えています。</b>送信時刻を分散するか、Paid 化のうえ送信予算を上げてください。' : ''}
+          </div></div></div>`;
+      }
       async function loadNotifications() {
         const g = guild.id;
         let segs = [], notifs = [], channels = [];
@@ -805,6 +834,8 @@
           ]);
         } catch (e) { toast(e.message, true); }
         cacheSegments = segs; cacheNotifs = notifs; cacheChannels = channels;
+        let est = null;
+        try { est = await api('/send-estimate?guild_id=' + encodeURIComponent(g)); } catch (_) {}
         const segName = (id) => { const s = segs.find((x) => x.id === id); return s ? s.name : '?'; };
         const chName = (id) => { const c = channels.find((x) => x.id === id); return c ? '#' + c.name : id; };
 
@@ -834,7 +865,7 @@
             </div></div>`;
         }).join('');
 
-        $('#sec-notifications').innerHTML = `<h2>通知 (${notifs.length})</h2>
+        $('#sec-notifications').innerHTML = `${est ? estimateBanner(est) : ''}<h2>通知 (${notifs.length})</h2>
           ${notifs.length ? rows : '<div class="empty">まだ通知がありません。<br>下のフォームから最初の通知を作成しましょう。</div>'}
           <div id="occBox"></div>
           ${segs.length ? notifForm() : '<p class="muted" style="margin-top:16px">※ 先に「メンバー区分」を作成してください（通知の対象になります）。</p>'}`;
@@ -879,31 +910,32 @@
           ? cacheChannels.map((c) => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')
           : '<option value="">（チャンネルを取得できませんでした）</option>';
         const wdOpts = WEEKDAYS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+        const hourOpts = Array.from({ length: 24 }, (_, h) =>
+          `<option value="${h}"${h === 21 ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('');
+        // 単発(oneoff)UI は撤去し recurring 専用。type は hidden で固定（oneoff の JS/バックエンドは休眠残置）。
         return `<fieldset><legend id="nFormTitle">新規通知</legend>
           <input type="hidden" id="nId" value="" />
+          <input type="hidden" id="nType" value="recurring" />
+
           <div class="row">
-            <div><label>名前</label><input id="nName" placeholder="例: 土曜定例・キャスト出欠" /></div>
-            <div><label>投稿チャンネル</label><select id="nChannel">${chOpts}</select></div>
+            <div><label>通知名 <span class="req">✱</span></label><input id="nName" placeholder="例: 土曜定例・キャスト出欠" /></div>
+            <div><label>対象区分 <span class="req">✱</span></label><select id="nSegment">${segOpts}</select></div>
           </div>
-          <div class="row">
-            <div><label>対象区分（メンバー区分）</label><select id="nSegment">${segOpts}</select></div>
-            <div><label>開催時間（分）<span class="muted">（任意・空欄で開始時刻のみ表示）</span></label>
-              <input id="nDuration" type="number" min="0" placeholder="例: 120（2時間）" /></div>
-          </div>
-          <label>見出し <span class="muted">（投稿の1行目・必須）</span></label>
+          <label>投稿チャンネル <span class="req">✱</span></label><select id="nChannel">${chOpts}</select>
+          <label>見出し <span class="req">✱</span> <span class="muted">（投稿の1行目）</span></label>
           <input id="nTitle" maxlength="100" placeholder="例: 第1・3・5日曜キャスト 開催のお知らせ" />
           <label>本文 <span class="muted">（任意・複数行可。日時と回答ボタンは自動で付きます）</span></label>
           <textarea id="nBody" rows="3" maxlength="1500" placeholder="補足メッセージ（任意）"></textarea>
-          <label>種別</label>
-          <select id="nType"><option value="recurring">繰り返し</option><option value="oneoff">単発</option></select>
+
+          <div class="subhead">スケジュール</div>
           <div id="nRecurBox">
-            <div style="max-width:280px"><label>開始時刻</label><input id="nStartTime" type="time" value="21:00" /></div>
             <div class="row">
-              <div><label>繰り返し</label><select id="nMode">
+              <div><label>開始時刻 <span class="req">✱</span></label><input id="nStartTime" type="time" value="21:00" /></div>
+              <div><label>繰り返し <span class="req">✱</span></label><select id="nMode">
                 <option value="weekly">毎週</option><option value="biweekly">隔週</option><option value="monthly">毎月第N曜</option>
               </select></div>
-              <div id="nWeekdayBox"><label>曜日</label><select id="nWeekday">${wdOpts}</select></div>
             </div>
+            <div id="nWeekdayBox"><label>曜日</label><select id="nWeekday">${wdOpts}</select></div>
             <div id="nMonthlyBox" class="hidden">
               <label>開催日（第N × 曜日・複数可）</label>
               <div id="nMonthlyRules" class="timechips"></div>
@@ -913,36 +945,68 @@
             <div id="nNextBox"><label>次にこの通知で開催する日 <span class="muted">（隔週の起点）</span></label>
               <select id="nNext"></select></div>
           </div>
-          <div id="nOneoffBox" class="hidden">
-            <label>開催候補（日付ごとに時刻を複数）</label>
-            <div id="nOneoffDates"></div>
-            <button type="button" class="btn sm secondary" id="nOneoffAdd" style="margin-top:8px">＋ 候補日を追加</button>
-            <p class="muted" style="font-size:12px;margin-top:8px">参加者は「候補日＋時刻」のスロットごとに出欠を回答できます。集計後に「開催回」から1つを確定できます。</p>
-          </div>
           <div class="summary">📅 <span id="nSummary">—</span></div>
-          <div class="row">
-            <div id="nRecruitBox"><label id="nRecruitLabel">開始 N 日前に募集を投稿</label><input id="nRecruit" type="number" value="7" /></div>
-            <div id="nRemindStartBox"><label>N 日前から未回答者へリマインド <span class="muted">（一度も押していない人・毎日）</span></label><input id="nRemindStart" type="number" value="3" /></div>
+
+          <div class="setting-row" id="nResponseRow">
+            <div class="setting-row-main">
+              <div class="setting-row-title">回答を集める（参加/不参加/未定）</div>
+              <div class="setting-row-desc">オフ＝通知のみ（告知）。回答・リマインド・ノルマ・締切は無効になります。</div>
+            </div>
+            <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nRequireResponse" checked /><span class="switch-slider"></span></label></div>
           </div>
-          <div class="row" id="nRemindUndecidedBox">
-            <div><label>N 日前に未定者へリマインド <span class="muted">（「未定」回答者へ確定を促す・1回）</span></label><input id="nRemindUndecided" type="number" value="1" min="0" /></div>
-          </div>
-          <p id="nOneoffRecruitNote" class="muted hidden" style="font-size:12px;margin-top:6px">
-            単発は自動募集しません。各通知の「📣 募集」ボタン（通知一覧／開催回）から好きなタイミングで送信できます。</p>
-          <label>メンション方法</label>
-          <select id="nMention">
-            <option value="role">ロール（区分のロール / @everyone）</option>
-            <option value="members">バイネーム（メンバーを個別に呼ぶ）</option>
-            <option value="none">なし</option>
-          </select>
-          <p id="nMentionWarn" class="muted hidden" style="font-size:12px;color:var(--warn);margin-top:6px">⚠️ @everyone 区分でバイネームは全員への個別メンションになり、人数が多いと「ほかN名」で省略されます。</p>
-          <div class="actions" style="margin-top:12px">
-            <label class="inline" id="nResponseLabel"><input type="checkbox" id="nRequireResponse" checked /> 回答を集める（参加/不参加/未定）</label>
-            <label class="inline" id="nQuotaLabel"><input type="checkbox" id="nQuota" /> ノルマ</label>
-            <label class="inline" id="nAssignmentLabel"><input type="checkbox" id="nAssignment" /> 番号割り当て</label>
-            <label class="inline"><input type="checkbox" id="nActive" checked /> 有効</label>
-          </div>
-          <div id="nQuotaBox" class="hidden" style="max-width:280px"><label>ノルマ間隔（日数）</label><input id="nQuotaInterval" type="number" placeholder="例: 30" /></div>
+
+          <details class="section" id="nAdvanced">
+            <summary>詳細設定（必要に応じて）</summary>
+            <div class="section-body">
+
+              <div class="subhead">投稿の見せ方</div>
+              <label>メンション方法</label>
+              <select id="nMention">
+                <option value="role">ロール（区分のロール / @everyone）</option>
+                <option value="members">バイネーム（メンバーを個別に呼ぶ）</option>
+                <option value="none">なし</option>
+              </select>
+              <p id="nMentionWarn" class="muted hidden" style="font-size:12px;color:var(--warn);margin-top:6px">⚠️ @everyone 区分でバイネームは全員への個別メンションになり、人数が多いと「ほかN名」で省略されます。</p>
+              <label>開催時間（分）<span class="muted">（任意・空欄で開始時刻のみ表示）</span></label>
+              <input id="nDuration" type="number" min="0" placeholder="例: 120（2時間）" />
+
+              <div class="subhead">送信タイミング</div>
+              <div class="row">
+                <div><label>送信時刻 <span class="muted">（cron 送信の時刻・JST）</span></label><select id="nSendHour">${hourOpts}</select></div>
+                <div id="nRecruitBox"><label id="nRecruitLabel">開始 N 日前に募集を投稿</label><input id="nRecruit" type="number" value="7" /></div>
+              </div>
+              <div class="row">
+                <div id="nRemindStartBox"><label>N 日前から未回答者へリマインド <span class="muted">（毎日）</span></label><input id="nRemindStart" type="number" value="3" /></div>
+                <div id="nRemindUndecidedBox"><label>N 日前に未定者へリマインド <span class="muted">（1回）</span></label><input id="nRemindUndecided" type="number" value="1" min="0" /></div>
+              </div>
+
+              <div class="subhead">回答締切と変更通知</div>
+              <div class="row" id="nDeadlineBox">
+                <div><label>回答締切 <span class="muted">（開始の N 時間前・空欄＝締切なし）</span></label><input id="nDeadlineHours" type="number" min="0" placeholder="例: 3" /></div>
+                <div><label>変更通知チャンネル <span class="muted">（締切後の変更を投稿・空欄＝投稿チャンネル）</span></label>
+                  <select id="nAlertChannel"><option value="">（投稿チャンネルと同じ）</option>${chOpts}</select></div>
+              </div>
+              <p class="muted" style="font-size:12px;margin-top:6px">締切後に回答が変更されると、上のチャンネルへメンションなしで記録投稿し、回答履歴に「締切後変更」として残ります。</p>
+
+              <div class="subhead">機能</div>
+              <div class="setting-row" id="nQuotaRow">
+                <div class="setting-row-main"><div class="setting-row-title">ノルマ（参加間隔の督促）</div><div class="setting-row-desc">前回参加から指定日数を超えたメンバーへ DM で参加を促します。</div></div>
+                <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nQuota" /><span class="switch-slider"></span></label></div>
+              </div>
+              <div id="nQuotaBox" class="hidden" style="max-width:280px"><label>ノルマ間隔（日数）</label><input id="nQuotaInterval" type="number" placeholder="例: 30" /></div>
+              <div class="setting-row" id="nAssignmentRow">
+                <div class="setting-row-main"><div class="setting-row-title">番号割り当て</div><div class="setting-row-desc">参加者に連番 1..N をランダムに割り当てます（個室・座席等）。</div></div>
+                <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nAssignment" /><span class="switch-slider"></span></label></div>
+              </div>
+
+              <div class="subhead">状態</div>
+              <div class="setting-row">
+                <div class="setting-row-main"><div class="setting-row-title">有効</div><div class="setting-row-desc">オフにすると cron 送信の対象外になります。</div></div>
+                <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nActive" checked /><span class="switch-slider"></span></label></div>
+              </div>
+            </div>
+          </details>
+
           <div class="actions" style="margin-top:14px">
             <button class="btn" id="nSave">保存</button>
             <button class="btn secondary hidden" id="nReset">新規入力に戻す</button>
@@ -957,32 +1021,21 @@
         if (keep) $('#nNext').value = keep;
       }
       function syncNotifUI() {
-        const t = $('#nType').value, mode = $('#nMode').value;
-        $('#nRecurBox').classList.toggle('hidden', t !== 'recurring');
-        $('#nOneoffBox').classList.toggle('hidden', t !== 'oneoff');
-        // 毎月は (第N×曜日) ルール編集を出し単一「曜日」を隠す。毎週/隔週は単一曜日。
-        const monthly = t === 'recurring' && mode === 'monthly';
+        const mode = $('#nMode').value;
+        const monthly = mode === 'monthly';
         $('#nMonthlyBox').classList.toggle('hidden', !monthly);
         $('#nWeekdayBox').classList.toggle('hidden', monthly);
-        $('#nNextBox').classList.toggle('hidden', !(t === 'recurring' && mode === 'biweekly'));
-        // 回答要否は recurring 専用（単発は常に回答あり）。回答不要=通知のみ（ADR 0010）。
-        const requireResp = $('#nRequireResponse').checked;
-        const announceOnly = t === 'recurring' && !requireResp;
-        $('#nResponseLabel').classList.toggle('hidden', t !== 'recurring');
-        // 単発／回答不要はノルマ非対応（参加間隔の督促は回答前提の概念）。隠してオフ固定。
-        if (t === 'oneoff' || announceOnly) $('#nQuota').checked = false;
-        $('#nQuotaLabel').classList.toggle('hidden', t === 'oneoff' || announceOnly);
-        $('#nQuotaBox').classList.toggle('hidden', t === 'oneoff' || announceOnly || !$('#nQuota').checked);
-        // 回答不要は番号割り当て・未回答/未定リマインドも対象外（回答が無いため）。
-        if (announceOnly) $('#nAssignment').checked = false;
-        $('#nAssignmentLabel').classList.toggle('hidden', announceOnly);
+        $('#nNextBox').classList.toggle('hidden', mode !== 'biweekly');
+        // 回答不要(通知のみ)は回答依存の機能（リマインド/ノルマ/番号/締切）を隠す（ADR 0010/0014）。
+        const announceOnly = !$('#nRequireResponse').checked;
+        if (announceOnly) { $('#nQuota').checked = false; $('#nAssignment').checked = false; }
+        $('#nQuotaRow').classList.toggle('hidden', announceOnly);
+        $('#nQuotaBox').classList.toggle('hidden', announceOnly || !$('#nQuota').checked);
+        $('#nAssignmentRow').classList.toggle('hidden', announceOnly);
         $('#nRemindStartBox').classList.toggle('hidden', announceOnly);
         $('#nRemindUndecidedBox').classList.toggle('hidden', announceOnly);
-        // 募集日数(nRecruit)は投稿タイミングとして残す。回答不要ならラベルを「告知」に。
+        $('#nDeadlineBox').classList.toggle('hidden', announceOnly);
         $('#nRecruitLabel').textContent = announceOnly ? '開始 N 日前に告知を投稿' : '開始 N 日前に募集を投稿';
-        // 単発は手動募集のため「開始N日前に募集」を隠し、代わりに注記を出す
-        $('#nRecruitBox').classList.toggle('hidden', t === 'oneoff');
-        $('#nOneoffRecruitNote').classList.toggle('hidden', t !== 'oneoff');
         // バイネーム × @everyone 区分は全員個別メンションになるため警告を出す。
         const seg = cacheSegments.find((s) => String(s.id) === $('#nSegment').value);
         const warn = $('#nMention').value === 'members' && !!seg && seg.mention_role_id === '@everyone';
@@ -991,12 +1044,10 @@
       }
       function bindNotifForm() {
         refreshNextOptions();
-        renderOneoffSlots([]);
         renderMonthlyRules([]);
-        ['nType', 'nMode', 'nStartTime', 'nNext', 'nDuration', 'nRequireResponse', 'nMention', 'nSegment'].forEach((id) => { $('#' + id).onchange = syncNotifUI; });
+        ['nMode', 'nStartTime', 'nNext', 'nDuration', 'nRequireResponse', 'nMention', 'nSegment'].forEach((id) => { $('#' + id).onchange = syncNotifUI; });
         $('#nWeekday').onchange = () => { refreshNextOptions(); syncNotifUI(); };
         $('#nQuota').onchange = syncNotifUI;
-        $('#nOneoffAdd').onclick = addOneoffGroup;
         $('#nMonthlyAdd').onclick = addMonthlyRule;
         $('#nSave').onclick = (e) => withBusy(e.currentTarget, saveNotif);
         $('#nReset').onclick = resetNotifForm;
@@ -1005,39 +1056,21 @@
       function resetNotifForm() {
         $('#nId').value = ''; $('#nFormTitle').textContent = '新規通知'; $('#nReset').classList.add('hidden');
         $('#nName').value = ''; $('#nTitle').value = ''; $('#nBody').value = '';
-        $('#nType').value = 'recurring'; $('#nMode').value = 'weekly';
-        $('#nWeekday').value = 'SA'; renderMonthlyRules([]); renderOneoffSlots([]);
+        $('#nMode').value = 'weekly';
+        $('#nWeekday').value = 'SA'; renderMonthlyRules([]);
         $('#nStartTime').value = '21:00'; $('#nDuration').value = ''; $('#nRecruit').value = '7';
         $('#nRemindStart').value = '3'; $('#nRemindUndecided').value = '1';
         $('#nQuotaInterval').value = '';
         $('#nQuota').checked = false; $('#nAssignment').checked = false;
         $('#nMention').value = 'role'; $('#nRequireResponse').checked = true; $('#nActive').checked = true;
+        $('#nSendHour').value = '21'; $('#nDeadlineHours').value = ''; $('#nAlertChannel').value = '';
+        if ($('#nAdvanced')) $('#nAdvanced').open = false;
         refreshNextOptions(); syncNotifUI();
       }
       async function fillNotifForm(n) {
         if (!n || !$('#nId')) return;
-        // 単発は候補スロットを先に取得する。取得失敗時はトーストして編集を中断
-        // （半端なフォームのまま保存して既存スロットを消すのを防ぐ）。
-        let oneoffGroups = [];
-        if (n.type === 'oneoff') {
-          try {
-            const occs = await api('/notifications/' + n.id + '/occurrences');
-            const byDate = new Map();
-            occs.filter((o) => o.status === 'scheduled')
-              .sort((a, b) => (a.occurrence_date === b.occurrence_date
-                ? (a.start_time || '').localeCompare(b.start_time || '')
-                : a.occurrence_date.localeCompare(b.occurrence_date)))
-              .forEach((o) => {
-                if (!byDate.has(o.occurrence_date)) byDate.set(o.occurrence_date, []);
-                byDate.get(o.occurrence_date).push(o.start_time || n.start_time || '21:00');
-              });
-            oneoffGroups = [...byDate.entries()].map(([date, times]) => ({ date, times }));
-            if (!oneoffGroups.length && n.one_off_date) oneoffGroups = [{ date: n.one_off_date, times: [n.start_time || '21:00'] }];
-          } catch (e) {
-            toast('候補スロットの読み込みに失敗しました。再読み込みしてから編集してください', true);
-            return; // 中断（フォームを開かない＝保存によるスロット消失を防ぐ）
-          }
-        }
+        // 単発(oneoff)UI は撤去済み。万一の旧データはこのフォームで編集しない（保存で壊さないため）。
+        if (n.type === 'oneoff') { toast('単発通知の編集は現在無効です。', true); return; }
         $('#nId').value = n.id; $('#nFormTitle').textContent = '編集 (ID: ' + n.id + ')'; $('#nReset').classList.remove('hidden');
         $('#nName').value = n.name || '';
         $('#nTitle').value = n.message_title || '';
@@ -1047,11 +1080,9 @@
         }
         $('#nChannel').value = n.channel_id || '';
         $('#nSegment').value = String(n.segment_id);
-        $('#nType').value = n.type || 'recurring';
         const b = parseRRuleToBuilder(n.rrule);
         $('#nMode').value = b.mode; $('#nWeekday').value = b.byday;
         renderMonthlyRules(b.mode === 'monthly' ? b.rules : []);
-        renderOneoffSlots(n.type === 'oneoff' ? oneoffGroups : []);
         $('#nStartTime').value = n.start_time || '21:00';
         $('#nDuration').value = n.duration_minutes == null ? '' : n.duration_minutes;
         $('#nRecruit').value = n.recruit_days_before; $('#nRemindStart').value = n.remind_start_days;
@@ -1061,24 +1092,28 @@
         $('#nMention').value = n.mention_mode || 'role';
         $('#nRequireResponse').checked = n.requires_response == null ? true : !!n.requires_response;
         $('#nActive').checked = !!n.active;
+        $('#nSendHour').value = String(n.send_hour == null ? 21 : n.send_hour);
+        $('#nDeadlineHours').value = n.response_deadline_hours == null ? '' : n.response_deadline_hours;
+        if (n.change_alert_channel_id && ![...$('#nAlertChannel').options].some((o) => o.value === n.change_alert_channel_id)) {
+          $('#nAlertChannel').insertAdjacentHTML('beforeend', `<option value="${esc(n.change_alert_channel_id)}">ID: ${esc(n.change_alert_channel_id)}</option>`);
+        }
+        $('#nAlertChannel').value = n.change_alert_channel_id || '';
+        if ($('#nAdvanced')) $('#nAdvanced').open = true;
         refreshNextOptions(n.anchor_date || null);
         syncNotifUI();
         $('#nFormTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       async function saveNotif() {
-        const type = $('#nType').value;
         const qi = $('#nQuotaInterval').value.trim();
-        const slots = type === 'oneoff' ? getOneoffSlots() : [];
+        const dh = $('#nDeadlineHours').value.trim();
         const body = {
           guild_id: guild.id,
           name: $('#nName').value.trim(),
           channel_id: $('#nChannel').value.trim(),
           segment_id: Number($('#nSegment').value),
-          type,
-          rrule: type === 'recurring' ? buildRRule() : null,
-          one_off_date: type === 'oneoff' ? (slots[0] ? slots[0].date : null) : null,
-          candidate_slots: type === 'oneoff' ? slots : undefined,
-          anchor_date: type === 'recurring' && $('#nMode').value === 'biweekly' ? ($('#nNext').value || null) : null,
+          type: 'recurring',
+          rrule: buildRRule(),
+          anchor_date: $('#nMode').value === 'biweekly' ? ($('#nNext').value || null) : null,
           start_time: $('#nStartTime').value.trim() || '21:00',
           duration_minutes: durValue(),
           message_title: $('#nTitle').value.trim(),
@@ -1090,15 +1125,17 @@
           quota_interval_days: qi === '' ? null : Number(qi),
           assignment_enabled: $('#nAssignment').checked ? 1 : 0,
           mention_mode: $('#nMention').value,
-          // 回答要否は recurring 専用。単発は常に回答あり。
-          requires_response: type === 'oneoff' ? 1 : ($('#nRequireResponse').checked ? 1 : 0),
+          requires_response: $('#nRequireResponse').checked ? 1 : 0,
+          // ③ 送信時刻・① 回答締切/変更通知チャンネル
+          send_hour: Number($('#nSendHour').value),
+          response_deadline_hours: dh === '' ? null : Number(dh),
+          change_alert_channel_id: $('#nAlertChannel').value.trim() || null,
           active: $('#nActive').checked ? 1 : 0,
         };
         if (!body.name) return toast('名前は必須です', true);
         if (!body.message_title) return toast('見出しは必須です', true);
         if (!body.channel_id) return toast('チャンネルを選択してください', true);
         if (!body.segment_id) return toast('区分を選択してください', true);
-        if (type === 'oneoff' && slots.length === 0) return toast('候補（日付＋時刻）を1つ以上追加してください', true);
         const id = $('#nId').value;
         try {
           if (id) { await api('/notifications/' + id, { method: 'PUT', body: JSON.stringify(body) }); toast('更新しました'); }
@@ -1369,16 +1406,53 @@
       async function loadRecords() {
         let responses = [];
         try { responses = await api('/responses?limit=200'); } catch (e) { toast(e.message, true); }
-        const rows = responses.map((r) => `<tr>
-          <td>${esc(r.occurrence_date || '')}${r.occurrence_time ? ' ' + esc(r.occurrence_time) : ''}</td>
-          <td>${esc(r.notification_name || '')}</td>
-          <td>${esc(r.user_name || r.user_id)}</td><td>${esc(r.status)}</td>
-          <td class="muted">${esc((r.updated_at || '').slice(0, 19))}</td></tr>`).join('');
         $('#sec-records').innerHTML = `<h2>回答履歴</h2>
-          <p class="muted">直近 ${responses.length} 件（全サーバー横断の回答ログ）。番号割り当ては「通知 → 開催回」から実行します。</p>
-          ${responses.length
-            ? `<div class="table-wrap"><table><thead><tr><th>開催日時</th><th>通知</th><th>メンバー</th><th>回答</th><th>更新</th></tr></thead><tbody>${rows}</tbody></table></div>`
-            : '<div class="empty">まだ回答がありません。募集を投稿し、メンバーがボタンで回答すると、ここに表示されます。</div>'}`;
+          <p class="muted">直近 ${responses.length} 件（全サーバー横断）。列ヘッダのクリックでソート、各列下で絞り込み、ヘッダのドラッグで並べ替え。</p>
+          <div id="recordsTable"></div>`;
+        if (!responses.length) {
+          $('#recordsTable').innerHTML = '<div class="empty">まだ回答がありません。募集を投稿し、メンバーがボタンで回答すると、ここに表示されます。</div>';
+          return;
+        }
+        window.EventBotTable.mount($('#recordsTable'), {
+          searchPlaceholder: '回答を全体検索',
+          columns: [
+            { id: 'when', header: '開催日時', accessor: (r) => `${r.occurrence_date || ''}${r.occurrence_time ? ' ' + r.occurrence_time : ''}` },
+            { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },
+            { id: 'member', header: 'メンバー', accessor: (r) => r.user_name || r.user_id },
+            { id: 'status', header: '回答', accessor: (r) => r.status || '' },
+            { id: 'deadline', header: '締切後変更', accessor: (r) => (r.post_deadline_change ? 'あり' : 'なし'),
+              render: (v) => v === 'あり' ? '<span class="pill" style="color:var(--warn);border-color:var(--warn)">締切後変更</span>' : '<span class="muted">—</span>' },
+            { id: 'updated', header: '更新', accessor: (r) => (r.updated_at || '').slice(0, 19), render: (v) => `<span class="muted">${esc(v)}</span>` },
+          ],
+          rows: responses,
+        });
+      }
+
+      async function loadSendLog() {
+        let logs = [];
+        try { logs = await api('/send-log?limit=300'); } catch (e) { toast(e.message, true); }
+        const kindLabel = { recruit: '募集', remind_unanswered: '未回答リマインド', remind_undecided: '未定リマインド', quota: 'ノルマ', deadline_notice: '締切告知' };
+        $('#sec-sendlog').innerHTML = `<h2>リマインド送信履歴</h2>
+          <p class="muted">cron が送った募集・リマインド・ノルマ・締切告知の記録（直近 ${logs.length} 件・全サーバー横断）。DM 拒否などの失敗もここで確認できます。</p>
+          <div id="sendlogTable"></div>`;
+        if (!logs.length) {
+          $('#sendlogTable').innerHTML = '<div class="empty">まだ送信記録がありません。送信時刻になると cron が送信し、ここに記録されます。</div>';
+          return;
+        }
+        window.EventBotTable.mount($('#sendlogTable'), {
+          searchPlaceholder: '送信履歴を全体検索',
+          columns: [
+            { id: 'date', header: '送信日', accessor: (r) => r.send_date || '' },
+            { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },
+            { id: 'occ', header: '開催日', accessor: (r) => r.occurrence_date || '' },
+            { id: 'kind', header: '種別', accessor: (r) => kindLabel[r.kind] || r.kind },
+            { id: 'to', header: '宛先', accessor: (r) => r.user_id || '（チャンネル）' },
+            { id: 'status', header: '結果', accessor: (r) => r.status,
+              render: (v) => v === 'sent' ? '<span class="pill on">送信</span>' : v === 'failed' ? '<span class="pill" style="color:var(--danger);border-color:var(--danger)">失敗</span>' : `<span class="pill">${esc(v)}</span>` },
+            { id: 'error', header: '詳細', accessor: (r) => r.error || '', render: (v) => v ? `<span class="muted">${esc(v)}</span>` : '' },
+          ],
+          rows: logs,
+        });
       }
 
       // ================= セットアップ ウィザード =================

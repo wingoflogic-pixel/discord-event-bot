@@ -178,6 +178,21 @@ tbody tr:hover { background: rgba(255, 255, 255, .04); }
 .muted { color: var(--muted); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
+/* ---------- Form: 必須マーク / 折りたたみ / サブ見出し（通知オーバーホール）---------- */
+.req { color: var(--danger); margin-left: 2px; font-weight: 700; }
+.subhead { color: var(--text); font-weight: 700; font-size: 13px; margin: 18px 0 4px; letter-spacing: .02em; }
+details.section { border: 1px solid var(--border); border-radius: var(--r); background: var(--panel); margin: 14px 0; }
+details.section > summary {
+  list-style: none; cursor: pointer; padding: 12px 14px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 8px; user-select: none; border-radius: var(--r);
+}
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary::before { content: "▶"; color: var(--muted); font-size: 11px; transition: transform .15s ease; }
+details.section[open] > summary::before { transform: rotate(90deg); }
+details.section > summary:hover { background: var(--panel2); }
+details.section > summary:focus-visible { outline: none; box-shadow: var(--ring); }
+details.section > .section-body { padding: 2px 14px 14px; }
+
 /* ---------- Containers: fieldset ---------- */
 fieldset { border: 1px solid var(--border); border-radius: var(--r); margin: 14px 0; padding: 14px 16px; background: var(--panel); }
 legend { color: var(--text); padding: 0 8px; font-weight: 600; }
