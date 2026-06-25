@@ -116,7 +116,7 @@
       button.btn.ghost { background: transparent; border: 1px solid transparent; color: var(--muted); }
       button.btn.ghost:hover { background: var(--elevated); color: var(--text); }
       button.btn.ghost.danger { background: transparent; border-color: transparent; color: var(--muted); }
-      button.btn.ghost.danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+      button.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: transparent; color: var(--danger); }
       button.btn.sm { padding: 5px 11px; font-size: 13px; }
       button.btn.xs { padding: 3px 8px; font-size: 12px; border-radius: 6px; }
       button.btn.busy { position: relative; color: transparent !important; pointer-events: none; }
@@ -143,9 +143,9 @@
       }
       .toast.show { opacity: 1; transform: translateY(0); }
       .toast.err { background: var(--danger); }
-      .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; border: 1px solid transparent; background: rgba(255, 255, 255, .06); color: var(--muted); }
+      .pill { display: inline-block; padding: 1px 7px; border-radius: var(--r-sm); font-size: 11px; font-weight: 600; border: 1px solid transparent; background: rgba(255, 255, 255, .06); color: var(--muted); }
       .pill.on { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--pill-ok-text); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
-      .pill.off { background: rgba(255, 255, 255, .04); color: var(--text-placeholder); }
+      .pill.off { background: rgba(255, 255, 255, .05); color: var(--muted); }
       .summary {
         display: flex; align-items: center; gap: 8px; padding: 11px 13px; margin: 14px 0;
         background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: var(--r-sm); font-size: 14px; font-weight: 500;
@@ -272,7 +272,7 @@
         border: 1px solid transparent; transition: background .17s ease, color .17s ease;
       }
       .side .navitem:hover { background: var(--panel2); color: var(--text); }
-      .side .navitem.active { background: var(--elevated); color: var(--nav-active-text); border-color: transparent; font-weight: 600; }
+      .side .navitem.active { background: var(--elevated); color: var(--nav-active-text); border-color: transparent; font-weight: 600; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04); }
       .side .navitem.active:hover { background: color-mix(in srgb, #fff 4%, var(--elevated)); }
       .topbar {
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -282,7 +282,7 @@
       .srv { display: flex; align-items: center; gap: 10px; min-width: 0; }
       .ava {
         width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; flex: none;
-        justify-content: center; font-weight: 700; background: var(--accent-soft); color: var(--avatar-text); overflow: hidden;
+        justify-content: center; font-weight: 700; background: var(--accent); color: #fff; overflow: hidden;
       }
       .ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
       main { padding: 22px; max-width: 940px; }
@@ -295,6 +295,7 @@
       .listrow {
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
         padding: 14px 16px; border: 1px solid transparent; border-radius: var(--r); margin-bottom: 8px; background: var(--elevated);
+        box-shadow: 0 1px 0 rgba(0, 0, 0, .2);
       }
       .listrow:hover { background: color-mix(in srgb, #fff 4%, var(--elevated)); }
       .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
