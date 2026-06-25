@@ -283,6 +283,44 @@ main { padding: 22px; max-width: 940px; }
 .modal p { margin: 0 0 16px; color: var(--text); }
 .modal .actions { justify-content: flex-end; }
 
+/* ネイティブ <dialog> を使う小さな確認（破棄ガード等）。div 版 .modal と衝突しないよう dialog セレクタで限定 */
+dialog.modal { margin: auto; }
+dialog.modal::backdrop { background: var(--backdrop); animation: fade .15s ease; }
+
+/* 大きいフォーム用モーダル（ネイティブ <dialog>）。ヘッダ/フッタ固定・ボディのみスクロール */
+dialog.modal-lg {
+  width: min(680px, calc(100vw - 32px)); max-height: min(88vh, 900px);
+  padding: 0; margin: auto; overflow: hidden;
+  background: var(--elevated); color: var(--text);
+  border: 1px solid var(--border2); border-radius: var(--r-lg); box-shadow: var(--shadow);
+}
+dialog.modal-lg[open] { display: flex; flex-direction: column; }
+dialog.modal-lg::backdrop { background: var(--backdrop); animation: fade .15s ease; }
+.modal-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 20px; border-bottom: 1px solid var(--border); background: var(--elevated); }
+.modal-head h3 { margin: 0; font-size: 16px; }
+.modal-close { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); border-radius: var(--r-sm); cursor: pointer; font-size: 16px; }
+.modal-close:hover { background: var(--panel2); color: var(--text); }
+.modal-close:focus-visible { outline: none; box-shadow: var(--ring); }
+.modal-body { flex: 1 1 auto; overflow-y: auto; padding: 6px 20px 14px; }
+.modal-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 13px 20px; border-top: 1px solid var(--border); background: var(--elevated); }
+
+/* セクション見出し＋アクション（例: 通知見出し横の「＋新規通知」） */
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.sec-head h2 { margin: 0; }
+
+/* 配信タイムライン（通知フォーム ②案B） */
+.tl { margin: 6px 0 2px; }
+.tl-step { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+.tl-step:last-child { border-bottom: none; }
+.tl-badge { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
+.tl-main { flex: 1 1 auto; min-width: 0; }
+.tl-title { color: var(--text); font-weight: 600; font-size: 13.5px; }
+.tl-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.tl-row .pre, .tl-row .post { color: var(--muted); font-size: 13px; }
+.tl-row input[type=number] { width: 70px; }
+.tl-send { font-size: 13px; margin: 8px 0 2px; }
+.tl-warn { color: var(--warn); font-size: 12.5px; margin-top: 6px; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
   .shell { grid-template-columns: 1fr; min-height: 0; }
