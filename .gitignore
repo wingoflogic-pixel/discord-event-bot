@@ -36,3 +36,9 @@ secrets*.json
 # 検証アーティファクト（Playwright スクショ等・コミット不要）
 .playwright-mcp/
 verify-*.png
+
+# setup.html 手順書の元スクショ（中間生成物・base64で本体に埋め込むため非コミット）
+.captures/
+
+# 本番 D1 のローカルバックアップ（PII含む・コミット禁止）
+.backups/

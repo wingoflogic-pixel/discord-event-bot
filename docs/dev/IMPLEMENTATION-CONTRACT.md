@@ -2,6 +2,8 @@
 
 > **v8 改訂（重要）**: 本契約書は v7 スナップショット。以後の構造変更は ADR が上書きする — [0004 マルチサーバー](adr/0004-multi-server.md) / [0005 Event 廃止](adr/0005-drop-event-layer.md) / [0006 メンバー3層](adr/0006-member-three-layers.md) / [0007 管理画面リデザイン](adr/0007-admin-ui-redesign.md) / [0008 検証方針](adr/0008-verify-on-deployed-test-worker.md)。**Event 層は廃止**され階層は `Server(guild_id) ＞ Notification → Segment ＞ Occurrence`、`notifications.event_id` は `guild_id` に置換、UI は 2 層シェル＋各種ピッカーへ移行済み。本文中の Event / 単一テナント /「イベント」タブ / 基準日 等の旧記述は当該 ADR が優先する。
 
+> **v7.1.0 コマンド再編（2026-06-20・857879e）**: スラッシュコマンドを `/recruit`（管理者・引数なし・チャンネルから Notification 解決）／ `/help`（誰でも）／ `/manage`（管理者）の 3 つに集約。旧 `/assign` `/pause` `/resume` `/members` は **削除**し、機能は管理 UI 側で代替する。本契約書の §「スラッシュコマンド」記述中の旧コマンド仕様（`notification_id` 引数の `/recruit` / `/assign` や `/pause` `/resume` `/members`）は **歴史的記録**として残置。現行仕様は `src/discord/commands.json` および `src/interactions/index.ts` の `handleCommand` を単一の真実とする。
+
 各モジュールが従う API・アルゴリズム・I/F の単一の真実。型は `src/db/types.ts`、スキーマは `migrations/0002`＋`0003`(guild_id)＋`0004`(Event 廃止)、用語は `docs/dev/CONTEXT.md`、背景は `docs/dev/adr/*` を参照。
 
 **不変条件**

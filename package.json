@@ -1,6 +1,6 @@
 {
   "name": "discord-event-bot",
-  "version": "7.0.1",
+  "version": "7.1.0",
   "description": "汎用 Discord イベント出欠 Bot（Cloudflare Workers + D1・管理UI付き）。マルチサーバー対応・Server ＞ Notification → Segment ＞ Occurrence モデル。",
   "type": "module",
   "main": "src/index.ts",
@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "register-commands": "node scripts/register-commands.js"
+    "register-commands": "node scripts/register-commands.js",
+    "build:tables": "node design-system/build-ui-tables.mjs"
   },
   "dependencies": {
     "discord-interactions": "^4.1.0",

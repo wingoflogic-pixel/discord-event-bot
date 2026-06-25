@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ds-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["design-system/serve.mjs"],
+      "port": 5577
+    },
+    {
+      "name": "ui-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["design-system/serve-ui.mjs"],
+      "port": 5578
+    }
+  ]
+}

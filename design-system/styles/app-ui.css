@@ -1,0 +1,30 @@
+/* =============================================================
+ * EventBot — App composition layer（管理UI ui/index.html 専用）
+ * design-system の純コンポーネント（components.css）を、管理画面の
+ * 「画面」へ組み立てるレイアウト糊。tokens / components とは別レイヤーで、
+ * React 層・preview には不要なため index.css には含めない。
+ * sync-ui.mjs が tokens.css + components.css と連結して
+ * ui/index.html の <style> に注入する。
+ * ============================================================= */
+
+/* ---- ワークスペース全体: 最左の server-rail ＋ 本体（topbar + shell） ---- */
+.ws-layout { display: flex; align-items: stretch; min-height: 100vh; }
+.ws-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* server-rail は左に固定（本体をスクロールしても残す） */
+.ws-layout > .server-rail {
+  position: sticky; top: 0; align-self: flex-start; height: 100vh;
+  border-right: 1px solid var(--border);
+}
+
+/* ---- 狭幅: rail を上部の横スクロール帯へ ---- */
+@media (max-width: 720px) {
+  .ws-layout { flex-direction: column; }
+  .ws-layout > .server-rail {
+    position: static; height: auto; width: 100%;
+    flex-direction: row; overflow-x: auto; overflow-y: visible;
+    padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--border);
+  }
+  .ws-layout > .server-rail .server-rail-item::before { display: none; }
+  .ws-layout > .server-rail .server-rail-divider { width: 2px; height: 32px; margin: 0 2px; }
+}

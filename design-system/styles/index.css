@@ -1,0 +1,4 @@
+/* EventBot Design System — スタイルのエントリ。これ1枚で全体を読み込む。
+ * rendered designs / 静的HTML / React 層 すべてがこの import 閉包を受け取る。 */
+@import "./tokens.css";
+@import "./components.css";
