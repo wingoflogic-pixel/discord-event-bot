@@ -113,10 +113,10 @@
       button.btn.secondary:hover { background: var(--btn-secondary-hover); }
       button.btn.danger { background: var(--danger); }
       button.btn.danger:hover { background: var(--btn-danger-hover); }
-      button.btn.ghost { background: transparent; border: 1px solid transparent; color: var(--muted); }
-      button.btn.ghost:hover { background: var(--elevated); color: var(--text); }
-      button.btn.ghost.danger { background: transparent; border-color: transparent; color: var(--muted); }
-      button.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: transparent; color: var(--danger); }
+      button.btn.ghost { background: rgba(255, 255, 255, .04); border: 1px solid transparent; color: var(--muted); }
+      button.btn.ghost:hover { background: rgba(255, 255, 255, .09); color: var(--text); }
+      button.btn.ghost.danger { background: rgba(255, 255, 255, .04); border-color: transparent; color: var(--muted); }
+      button.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); border-color: transparent; color: var(--danger); }
       button.btn.sm { padding: 5px 11px; font-size: 13px; }
       button.btn.xs { padding: 3px 8px; font-size: 12px; border-radius: 6px; }
       button.btn.busy { position: relative; color: transparent !important; pointer-events: none; }
@@ -200,7 +200,7 @@
       .divider { height: 1px; border: none; background: var(--border); margin: 16px 0; }
       
       /* Alert (情報/警告/危険のコールアウト) */
-      .alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: 13.5px; color: var(--text); border: none; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel2)); }
+      .alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: 13.5px; color: var(--text); border: none; border-left: 3px solid color-mix(in srgb, var(--accent) 80%, var(--panel2)); background: color-mix(in srgb, var(--accent) 8%, var(--panel2)); }
       .alert-icon { flex: none; display: flex; color: var(--accent); margin-top: 1px; }
       .alert.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, var(--panel2)); }
       .alert.warn .alert-icon { color: var(--warn); }
@@ -295,7 +295,7 @@
       .listrow {
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
         padding: 14px 16px; border: 1px solid transparent; border-radius: var(--r); margin-bottom: 8px; background: var(--elevated);
-        box-shadow: 0 1px 0 rgba(0, 0, 0, .2);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
       }
       .listrow:hover { background: color-mix(in srgb, #fff 4%, var(--elevated)); }
       .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
