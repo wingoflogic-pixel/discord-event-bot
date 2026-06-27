@@ -712,9 +712,128 @@
       function selectGuild(g) {
         guild = g;
         localStorage.setItem(GUILD_KEY, JSON.stringify(g));
-        location.hash = g.id;
+        // ハッシュは `g/<guildId>` 形式（ADR 0016）。サーバー切替時は子ページパスをリセット。
+        suppressHashHandle = true;
+        location.hash = 'g/' + g.id;
+        setTimeout(() => { suppressHashHandle = false; }, 0);
         showWorkspace();
       }
+
+      // ================= ハッシュルータ（ADR 0016）=================
+      // URL ハッシュ形式: #g/<guildId>/<resource>/<uuid?>/<sub?>
+      //   #g/<gid>                                    → 通知タブ（既存）
+      //   #g/<gid>/notifications/new                  → 通知 新規
+      //   #g/<gid>/notifications/<nuuid>/edit         → 通知 編集
+      //   #g/<gid>/notifications/<nuuid>/occurrences  → 開催回
+      //   #g/<gid>/segments/<suuid>/members           → 区分メンバー
+      //   #g/<gid>/notifications/<nuuid>/occurrences/<ouuid>/grouping → グループ分け
+      // モーダル DOM は維持し、URL ↔ open/close を双方向に同期する（リロード復帰可・ブラウザバック対応）。
+      let suppressHashHandle = false;
+      function parseHash() {
+        const raw = (location.hash || '').replace(/^#/, '');
+        const parts = raw.split('/').filter(Boolean);
+        if (parts.length >= 2 && parts[0] === 'g') {
+          return { guildId: parts[1], rest: parts.slice(2) };
+        }
+        return { guildId: null, rest: [] };
+      }
+      /** 親パス（=ワークスペースのトップ）からの相対サブパスをハッシュへ反映 */
+      function navigate(subpath) {
+        if (!guild) return;
+        const base = 'g/' + guild.id;
+        const next = subpath ? base + '/' + subpath : base;
+        suppressHashHandle = true;
+        location.hash = next;
+        setTimeout(() => { suppressHashHandle = false; }, 0);
+        handleHashRoute();
+      }
+      /** どのフォームに dirty があるか集約 */
+      function anyDirty() { return formDirty || groupingState.dirty; }
+      /** ハッシュ→画面状態を同期。子ページ部はモーダル開閉で表現する。 */
+      async function handleHashRoute() {
+        if (suppressHashHandle) return;
+        const { guildId, rest } = parseHash();
+        if (!guildId || !guild || guild.id !== guildId) return; // workspace 未起動 / 別サーバー切替は別経路
+        // dirty なフォームが開いていて、ハッシュが「閉じる方向」なら確認
+        const closing = rest.length === 0
+          || (rest[0] === 'segments' && !$('#segMembersDialog')?.open && false) /* placeholder */;
+        // 子ページパスからモーダル状態を決定
+        const want = (() => {
+          if (rest.length === 0) return { kind: 'list' };
+          if (rest[0] === 'notifications') {
+            if (rest[1] === 'new') return { kind: 'notif-new' };
+            if (rest[2] === 'edit') return { kind: 'notif-edit', nuuid: rest[1] };
+            if (rest[2] === 'occurrences') {
+              if (rest[4] === 'grouping') return { kind: 'grouping', nuuid: rest[1], ouuid: rest[3] };
+              return { kind: 'occurrences', nuuid: rest[1] };
+            }
+          }
+          if (rest[0] === 'segments' && rest[2] === 'members') return { kind: 'seg-members', suuid: rest[1] };
+          return { kind: 'list' };
+        })();
+        // 通知タブが選ばれていない場合は切替（区分メンバー以外）
+        if (want.kind === 'seg-members') {
+          if (document.querySelector('.side .navitem.active')?.dataset.sec !== 'segments') switchSection('segments');
+        } else if (want.kind !== 'list') {
+          if (document.querySelector('.side .navitem.active')?.dataset.sec !== 'notifications') switchSection('notifications');
+        }
+        // 開かない方向に動いた dialog は閉じる
+        const closeIfOpen = (sel) => { const d = $(sel); if (d && d.open) d.close(); };
+        switch (want.kind) {
+          case 'list':
+            // すべてのフォーム系モーダルを閉じる（dirty 確認は close 系ヘルパ側に集約）
+            await tryCloseModal('nDialog', attemptCloseNotif);
+            closeIfOpen('#occDialog');
+            await tryCloseModal('groupingDialog', attemptCloseGrouping);
+            closeIfOpen('#segMembersDialog');
+            return;
+          case 'notif-new':
+            closeIfOpen('#occDialog'); closeIfOpen('#groupingDialog'); closeIfOpen('#segMembersDialog');
+            if (!$('#nDialog')?.open) openNotifModal(null);
+            return;
+          case 'notif-edit': {
+            closeIfOpen('#occDialog'); closeIfOpen('#groupingDialog'); closeIfOpen('#segMembersDialog');
+            const n = cacheNotifs.find((x) => x.uuid === want.nuuid);
+            if (n) { if (!$('#nDialog')?.open) openNotifModal(n); }
+            else { try {
+              const fetched = await api('/notifications/' + want.nuuid);
+              if (fetched) openNotifModal(fetched);
+            } catch (_) { toast('通知が見つかりません', true); navigate(''); } }
+            return;
+          }
+          case 'occurrences':
+            closeIfOpen('#nDialog'); closeIfOpen('#groupingDialog'); closeIfOpen('#segMembersDialog');
+            loadOccurrences(want.nuuid);
+            return;
+          case 'grouping':
+            closeIfOpen('#nDialog'); closeIfOpen('#segMembersDialog');
+            openGroupingDialog(want.ouuid, want.nuuid);
+            return;
+          case 'seg-members':
+            closeIfOpen('#nDialog'); closeIfOpen('#occDialog'); closeIfOpen('#groupingDialog');
+            loadSegmentMembers(want.suuid);
+            return;
+        }
+      }
+      async function tryCloseModal(id, closer) {
+        const d = $('#' + id); if (!d || !d.open) return;
+        await closer();
+      }
+      /** 開催回モーダルを閉じて一覧へ */
+      function closeOccurrencesPage() {
+        const d = $('#occDialog'); if (d && d.open) d.close();
+        navigate('');
+      }
+      /** 区分メンバーモーダルを閉じて一覧へ */
+      function closeSegMembersPage() {
+        const d = $('#segMembersDialog'); if (d && d.open) d.close();
+        navigate('');
+      }
+      // ブラウザ操作: hashchange とリロード
+      window.addEventListener('hashchange', () => { handleHashRoute(); });
+      window.addEventListener('beforeunload', (e) => {
+        if (anyDirty()) { e.preventDefault(); e.returnValue = ''; }
+      });
 
       // ================= ナビ =================
       const SECTIONS = ['notifications', 'segments', 'records', 'sendlog', 'setup'];
@@ -973,10 +1092,10 @@
                 ${sched} ・ ${esc(chName(n.channel_id))}</div></div>
             <div class="actions">
               <span class="pill ${n.active ? 'on' : 'off'}">${n.active ? '有効' : '無効'}</span>
-              <button class="btn sm ghost" data-nrecruit="${n.id}">📣 募集</button>
-              <button class="btn sm ghost" data-nedit="${n.id}">編集</button>
-              <button class="btn sm ghost" data-nocc="${n.id}">開催回</button>
-              <button class="btn sm ghost danger" data-ndel="${n.id}">削除</button>
+              <button class="btn sm ghost" data-nrecruit="${esc(n.uuid)}">📣 募集</button>
+              <button class="btn sm ghost" data-nedit="${esc(n.uuid)}">編集</button>
+              <button class="btn sm ghost" data-nocc="${esc(n.uuid)}">開催回</button>
+              <button class="btn sm ghost danger" data-ndel="${esc(n.uuid)}">削除</button>
             </div></div>`;
         }).join('');
 
@@ -1006,15 +1125,15 @@
 
         if (segs.length) {
           bindNotifForm();
-          $('#nNewBtn').onclick = () => openNotifModal(null);
+          $('#nNewBtn').onclick = () => navigate('notifications/new');
         }
         document.querySelectorAll('[data-nedit]').forEach((b) => {
-          b.onclick = () => openNotifModal(cacheNotifs.find((x) => x.id === Number(b.dataset.nedit)));
+          b.onclick = () => navigate('notifications/' + b.dataset.nedit + '/edit');
         });
         document.querySelectorAll('[data-nocc]').forEach((b) => {
-          b.onclick = () => loadOccurrences(Number(b.dataset.nocc));
+          b.onclick = () => navigate('notifications/' + b.dataset.nocc + '/occurrences');
         });
-        document.querySelectorAll('#occDialog [data-occ-close]').forEach((b) => { b.onclick = () => $('#occDialog').close(); });
+        document.querySelectorAll('#occDialog [data-occ-close]').forEach((b) => { b.onclick = () => closeOccurrencesPage(); });
         document.querySelectorAll('[data-nrecruit]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この通知の募集メッセージをチャンネルへ投稿します。', { okLabel: '送信する' }))) return;
@@ -1043,7 +1162,7 @@
       }
 
       function notifForm() {
-        const segOpts = cacheSegments.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+        const segOpts = cacheSegments.map((s) => `<option value="${esc(s.uuid)}">${esc(s.name)}</option>`).join('');
         const chOpts = cacheChannels.length
           ? cacheChannels.map((c) => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')
           : '<option value="">（チャンネルを取得できませんでした）</option>';
@@ -1282,7 +1401,9 @@
       }
       async function attemptCloseNotif() {
         if (formDirty && !(await confirmDiscardNotif())) return;
+        formDirty = false;
         $('#nDialog').close();
+        navigate(''); // 親（一覧）へ
       }
       // フォームモーダルは top-layer のため、確認も <dialog>（div の confirmDialog は下に隠れる）。
       function confirmDiscardNotif() {
@@ -1323,7 +1444,7 @@
         if (!n || !$('#nId')) return;
         // 単発(oneoff)UI は撤去済み。万一の旧データはこのフォームで編集しない（保存で壊さないため）。
         if (n.type === 'oneoff') { toast('単発通知の編集は現在無効です。', true); return; }
-        $('#nId').value = n.id; $('#nFormTitle').textContent = '編集 (ID: ' + n.id + ')';
+        $('#nId').value = n.uuid; $('#nFormTitle').textContent = '編集';
         $('#nName').value = n.name || '';
         $('#nTitle').value = n.message_title || '';
         $('#nBody').value = n.message_body || '';
@@ -1331,7 +1452,9 @@
           $('#nChannel').insertAdjacentHTML('afterbegin', `<option value="${esc(n.channel_id)}">ID: ${esc(n.channel_id)}</option>`);
         }
         $('#nChannel').value = n.channel_id || '';
-        $('#nSegment').value = String(n.segment_id);
+        // segment_uuid を選択（cacheSegments から id → uuid を解決）
+        const seg = cacheSegments.find((s) => s.id === n.segment_id);
+        $('#nSegment').value = seg ? seg.uuid : '';
         const b = parseRRuleToBuilder(n.rrule);
         $('#nMode').value = b.mode; $('#nWeekday').value = b.byday;
         renderMonthlyRules(b.mode === 'monthly' ? b.rules : []);
@@ -1362,7 +1485,7 @@
           guild_id: guild.id,
           name: $('#nName').value.trim(),
           channel_id: $('#nChannel').value.trim(),
-          segment_id: Number($('#nSegment').value),
+          segment_uuid: $('#nSegment').value,
           type: 'recurring',
           rrule: buildRRule(),
           anchor_date: $('#nMode').value === 'biweekly' ? ($('#nNext').value || null) : null,
@@ -1390,16 +1513,16 @@
         if (!body.name) return err('名前は必須です');
         if (!body.message_title) return err('見出しは必須です');
         if (!body.channel_id) return err('チャンネルを選択してください');
-        if (!body.segment_id) return err('区分を選択してください');
+        if (!body.segment_uuid) return err('区分を選択してください');
         $('#nFormErr').textContent = '';
-        const id = $('#nId').value;
+        const uuid = $('#nId').value;
         try {
-          if (id) await api('/notifications/' + id, { method: 'PUT', body: JSON.stringify(body) });
+          if (uuid) await api('/notifications/' + uuid, { method: 'PUT', body: JSON.stringify(body) });
           else await api('/notifications', { method: 'POST', body: JSON.stringify(body) });
           formDirty = false;
           $('#nDialog').close();
-          toast(id ? '更新しました' : '作成しました');
-          loadNotifications();
+          navigate(''); // 一覧に戻る
+          toast(uuid ? '更新しました' : '作成しました');
         } catch (e) { $('#nFormErr').textContent = e.message; }
       }
 
@@ -1409,14 +1532,16 @@
         try { cacheNotifs = await api('/notifications?guild_id=' + encodeURIComponent(guild.id)); } catch (_) {}
         fn();
       }
-      async function loadOccTally(occId) {
-        const el = $('#tally-' + occId);
+      async function loadOccTally(occUuid) {
+        const el = $('#tally-' + cssId(occUuid));
         if (!el) return;
         try {
-          const b = await api('/occurrences/' + occId + '/status');
+          const b = await api('/occurrences/' + occUuid + '/status');
           el.textContent = `参加 ${b.参加.length}・不参加 ${b.不参加.length}・未定 ${b.未定.length}・未回答 ${b.未回答.length}`;
         } catch (_) { el.textContent = ''; }
       }
+      // CSS セレクタで使える ID 形式に変換（UUID のハイフンは CSS でそのまま使えるが、念のため）
+      function cssId(uuid) { return String(uuid || '').replace(/[^A-Za-z0-9-]/g, ''); }
       const JADOW = ['日', '月', '火', '水', '木', '金', '土'];
       function jaDow(dateStr) {
         const [y, m, d] = (dateStr || '').split('/').map(Number);
@@ -1427,78 +1552,79 @@
         const w = jaDow(o.occurrence_date);
         return `${o.occurrence_date}${w ? ` (${w})` : ''}${o.start_time ? ' ' + fmtTimeRange(o.start_time, dur) : ''}`;
       }
-      async function loadOccurrences(notifId) {
-        const n = cacheNotifs.find((x) => x.id === notifId);
+      async function loadOccurrences(notifUuid) {
+        const n = cacheNotifs.find((x) => x.uuid === notifUuid);
         const isOneoff = !!n && n.type === 'oneoff';
-        const decidedId = n ? n.decided_occurrence_id : null;
+        // 確定回の UUID（旧 decided_occurrence_id は INTEGER のため、cacheNotifs の文脈で id→uuid 解決は別ロード時にやる）
+        const decidedOccId = n ? n.decided_occurrence_id : null;
         let occs = [];
-        try { occs = await api('/notifications/' + notifId + '/occurrences'); } catch (e) { return toast(e.message, true); }
+        try { occs = await api('/notifications/' + notifUuid + '/occurrences'); } catch (e) { return toast(e.message, true); }
         const rows = occs.map((o) => {
-          const decided = decidedId === o.id;
+          const decided = decidedOccId === o.id;
           const label = o.status === 'cancelled' ? '取下げ' : (decided ? '確定' : (isOneoff ? '候補' : '予定'));
           const pillCls = o.status === 'cancelled' ? 'off' : 'on';
-          const decideBtn = (isOneoff && decidedId == null && o.status === 'scheduled')
-            ? `<button class="btn sm" data-decide="${o.id}" data-nid="${notifId}">この日時に確定</button>` : '';
+          const decideBtn = (isOneoff && decidedOccId == null && o.status === 'scheduled')
+            ? `<button class="btn sm" data-decide="${esc(o.uuid)}" data-nuuid="${esc(notifUuid)}">この日時に確定</button>` : '';
           const undecideBtn = decided
-            ? `<button class="btn sm ghost" data-undecide="${notifId}">確定解除</button>` : '';
+            ? `<button class="btn sm ghost" data-undecide="${esc(notifUuid)}">確定解除</button>` : '';
           return `<div class="pickrow">
             <div>${esc(occLabel(o, n && n.duration_minutes))} <span class="pill ${pillCls}">${label}</span>
-              <br><span class="muted" id="tally-${o.id}" style="font-size:12px">集計中…</span></div>
+              <br><span class="muted" id="tally-${cssId(o.uuid)}" style="font-size:12px">集計中…</span></div>
             <div class="actions">${decideBtn}${undecideBtn}
-              ${n && n.assignment_enabled ? `<button class="btn sm secondary" data-occ="${o.id}">番号割り当て</button>` : ''}
-              ${n && n.grouping_enabled ? `<button class="btn sm secondary" data-grouping-occ="${o.id}" data-nid="${notifId}">グループ分け</button>` : ''}</div></div>`;
+              ${n && n.assignment_enabled ? `<button class="btn sm secondary" data-occ="${esc(o.uuid)}">番号割り当て</button>` : ''}
+              ${n && n.grouping_enabled ? `<button class="btn sm secondary" data-grouping-occ="${esc(o.uuid)}" data-nuuid="${esc(notifUuid)}">グループ分け</button>` : ''}</div></div>`;
         }).join('');
         const recruitBtn = n
           ? `<div class="actions" style="margin-bottom:8px"><button class="btn sm secondary" id="occRecruit">📣 今すぐ募集を投稿</button></div>` : '';
-        $('#occTitle').textContent = `開催回: ${n ? n.name : notifId} (${occs.length})`;
+        $('#occTitle').textContent = `開催回: ${n ? n.name : notifUuid} (${occs.length})`;
         $('#occBox').innerHTML = `${recruitBtn}
           ${occs.length ? rows : '<div class="empty">開催回はまだありません。<br>単発は保存時に候補が、繰り返しは募集タイミングで生成されます。</div>'}
           <div id="assignBox"></div>`;
         const _od = $('#occDialog'); if (_od && !_od.open) _od.showModal();
-        document.querySelectorAll('[data-occ]').forEach((b) => { b.onclick = () => loadAssignments(Number(b.dataset.occ)); });
+        document.querySelectorAll('[data-occ]').forEach((b) => { b.onclick = () => loadAssignments(b.dataset.occ); });
         document.querySelectorAll('[data-grouping-occ]').forEach((b) => {
-          b.onclick = () => openGroupingDialog(Number(b.dataset.groupingOcc), Number(b.dataset.nid));
+          b.onclick = () => navigate('notifications/' + b.dataset.nuuid + '/occurrences/' + b.dataset.groupingOcc + '/grouping');
         });
         const rb = $('#occRecruit');
         if (rb) rb.onclick = async () => {
           if (!(await confirmDialog('この通知の募集メッセージをチャンネルへ投稿します。', { okLabel: '送信する' }))) return;
           await withBusy(rb, async () => {
-            try { const r = await api('/notifications/' + notifId + '/recruit', { method: 'POST' });
+            try { const r = await api('/notifications/' + notifUuid + '/recruit', { method: 'POST' });
               toast(r && r.message ? r.message : '募集を送信しました'); } catch (e) { toast(e.message, true); }
           });
         };
         document.querySelectorAll('[data-decide]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この日時を開催として確定し、他の候補をすべて取り下げます。', { okLabel: '確定する' }))) return;
-            try { await api('/notifications/' + b.dataset.nid + '/decide',
-              { method: 'POST', body: JSON.stringify({ occurrence_id: Number(b.dataset.decide) }) });
-              toast('確定しました'); refreshNotifsThen(() => loadOccurrences(notifId)); } catch (e) { toast(e.message, true); }
+            try { await api('/notifications/' + b.dataset.nuuid + '/decide',
+              { method: 'POST', body: JSON.stringify({ occurrence_uuid: b.dataset.decide }) });
+              toast('確定しました'); refreshNotifsThen(() => loadOccurrences(notifUuid)); } catch (e) { toast(e.message, true); }
           };
         });
         document.querySelectorAll('[data-undecide]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('確定を解除し、取り下げた候補を元に戻します。', { okLabel: '解除する' }))) return;
             try { await api('/notifications/' + b.dataset.undecide + '/undecide', { method: 'POST' });
-              toast('解除しました'); refreshNotifsThen(() => loadOccurrences(notifId)); } catch (e) { toast(e.message, true); }
+              toast('解除しました'); refreshNotifsThen(() => loadOccurrences(notifUuid)); } catch (e) { toast(e.message, true); }
           };
         });
-        for (const o of occs) loadOccTally(o.id);
+        for (const o of occs) loadOccTally(o.uuid);
       }
-      function renderAssignments(occId, list) {
+      function renderAssignments(occUuid, list) {
         const rows = (list || []).map((a) => `<tr><td>#${a.number}</td><td>${esc(a.name || a.user_id)}</td><td class="muted">${esc(a.user_id)}</td></tr>`).join('');
-        $('#assignBox').innerHTML = `<h3 style="margin-top:14px">番号割り当て（開催回 ${occId}）</h3>
+        $('#assignBox').innerHTML = `<h3 style="margin-top:14px">番号割り当て</h3>
           ${list && list.length ? `<table><thead><tr><th>番号</th><th>表示名</th><th>User ID</th></tr></thead><tbody>${rows}</tbody></table>`
             : '<p class="muted">割り当てはまだありません。</p>'}
-          <div class="actions" style="margin-top:10px"><button class="btn" id="runAssign" data-occ="${occId}">番号割り当てを実行</button></div>`;
+          <div class="actions" style="margin-top:10px"><button class="btn" id="runAssign" data-occ="${esc(occUuid)}">番号割り当てを実行</button></div>`;
         $('#runAssign').onclick = async () => {
           if (!(await confirmDialog('この開催回で番号割り当てを実行します。', { okLabel: '実行する' }))) return;
-          try { const res = await api('/occurrences/' + occId + '/assign', { method: 'POST' });
+          try { const res = await api('/occurrences/' + occUuid + '/assign', { method: 'POST' });
             toast(`割り当て実行: 新規 ${res && res.assigned ? res.assigned.length : 0} 名`);
-            renderAssignments(occId, res && res.all ? res.all : []); } catch (e) { toast(e.message, true); }
+            renderAssignments(occUuid, res && res.all ? res.all : []); } catch (e) { toast(e.message, true); }
         };
       }
-      async function loadAssignments(occId) {
-        try { renderAssignments(occId, await api('/occurrences/' + occId + '/assignments')); } catch (e) { toast(e.message, true); }
+      async function loadAssignments(occUuid) {
+        try { renderAssignments(occUuid, await api('/occurrences/' + occUuid + '/assignments')); } catch (e) { toast(e.message, true); }
       }
 
       // ----- グループ分け（ADR 0015）-----
@@ -1508,11 +1634,11 @@
       // - constraints: その通知のペア制約一覧
       // - sortables: SortableJS インスタンス配列（cleanup 用）
       // - dirty: 保存が必要な変更があるか
-      const groupingState = { occId: null, notifId: null, view: null, constraints: [], sortables: [], dirty: false };
+      const groupingState = { occUuid: null, notifUuid: null, view: null, constraints: [], sortables: [], dirty: false };
 
-      async function openGroupingDialog(occId, notifId) {
-        groupingState.occId = occId;
-        groupingState.notifId = notifId;
+      async function openGroupingDialog(occUuid, notifUuid) {
+        groupingState.occUuid = occUuid;
+        groupingState.notifUuid = notifUuid;
         groupingState.dirty = false;
         $('#groupingErr').textContent = '';
         const dlg = $('#groupingDialog');
@@ -1530,18 +1656,23 @@
           if (!(await confirmDialog('未保存の変更があります。閉じてもよろしいですか？', { okLabel: '閉じる', danger: true }))) return;
         }
         teardownSortables();
+        groupingState.dirty = false;
         $('#groupingDialog').close();
+        // 親（開催回ページ）へ戻る
+        if (groupingState.notifUuid) {
+          navigate('notifications/' + groupingState.notifUuid + '/occurrences');
+        }
       }
       function teardownSortables() {
         for (const s of groupingState.sortables) { try { s.destroy(); } catch (_) {} }
         groupingState.sortables = [];
       }
       async function reloadGroupingView() {
-        const occId = groupingState.occId;
-        const view = await api('/occurrences/' + occId + '/grouping');
+        const occUuid = groupingState.occUuid;
+        const view = await api('/occurrences/' + occUuid + '/grouping');
         groupingState.view = view;
         try {
-          groupingState.constraints = await api('/notifications/' + groupingState.notifId + '/constraints');
+          groupingState.constraints = await api('/notifications/' + groupingState.notifUuid + '/constraints');
         } catch (_) { groupingState.constraints = []; }
         renderGroupingDialog();
       }
@@ -1579,14 +1710,15 @@
       }
       function renderColumn(g, isPool) {
         const cls = isPool ? 'grouping-col pool' : 'grouping-col';
-        const groupId = isPool ? 'pool' : String(g.id);
+        // DOM data 属性として保持する識別子。pool は文字列、それ以外は group の UUID。
+        const groupKey = isPool ? 'pool' : esc(g.uuid);
         const cards = (g.members || []).map((m) => renderCard(m, isPool ? null : g.id)).join('');
         const head = isPool
-          ? `<div class="grouping-col-head"><span class="name">📥 ${esc(g.name)}</span><span class="count" id="count-${groupId}">${(g.members || []).length}</span></div>`
-          : `<div class="grouping-col-head"><span class="name" data-group-id="${g.id}" contenteditable="false" title="クリックで名前変更">${esc(g.name)}</span><span class="count" id="count-${groupId}">${(g.members || []).length}</span></div>`;
-        return `<div class="${cls}" data-group-id="${groupId}">
+          ? `<div class="grouping-col-head"><span class="name">📥 ${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`
+          : `<div class="grouping-col-head"><span class="name" data-group-uuid="${esc(g.uuid)}" contenteditable="false" title="クリックで名前変更">${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`;
+        return `<div class="${cls}" data-group-key="${groupKey}">
           ${head}
-          <div class="grouping-cards" data-group-id="${groupId}">${cards}</div>
+          <div class="grouping-cards" data-group-key="${groupKey}">${cards}</div>
         </div>`;
       }
       function renderCard(m, currentGroupId) {
@@ -1608,7 +1740,7 @@
           try {
             // 未保存の現在の配置をまず保存してからグループ数を変更（誤って消えないように）
             if (groupingState.view.grouping) await saveGroupingMembers(true);
-            await api('/occurrences/' + groupingState.occId + '/grouping',
+            await api('/occurrences/' + groupingState.occUuid + '/grouping',
               { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
             await reloadGroupingView();
             groupingState.dirty = false;
@@ -1616,14 +1748,13 @@
         });
         $('#groupingAuto').onclick = (e) => withBusy(e.currentTarget, async () => {
           if (!groupingState.view.grouping) {
-            // グループが未初期化なら先に PUT
             const gc = Number($('#groupingCount').value);
             if (!Number.isInteger(gc) || gc < 1) return toast('グループ数を指定してください', true);
-            await api('/occurrences/' + groupingState.occId + '/grouping',
+            await api('/occurrences/' + groupingState.occUuid + '/grouping',
               { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
           }
           try {
-            await api('/occurrences/' + groupingState.occId + '/grouping/auto-assign', { method: 'POST' });
+            await api('/occurrences/' + groupingState.occUuid + '/grouping/auto-assign', { method: 'POST' });
             await reloadGroupingView();
             groupingState.dirty = false;
             toast('自動配置しました');
@@ -1633,15 +1764,15 @@
           if (!(await confirmDialog('全メンバーをプールに戻します。', { okLabel: 'クリア' }))) return;
           if (!groupingState.view.grouping) return;
           try {
-            const assignments = groupingState.view.groups.map((g) => ({ group_id: g.id, user_ids: [] }));
-            await api('/occurrences/' + groupingState.occId + '/grouping/members',
+            const assignments = groupingState.view.groups.map((g) => ({ group_uuid: g.uuid, user_ids: [] }));
+            await api('/occurrences/' + groupingState.occUuid + '/grouping/members',
               { method: 'PUT', body: JSON.stringify({ assignments }) });
             await reloadGroupingView();
             groupingState.dirty = false;
           } catch (e) { toast(e.message, true); }
         };
         // グループ名のインライン編集
-        document.querySelectorAll('#groupingBoard .grouping-col-head .name[data-group-id]').forEach((el) => {
+        document.querySelectorAll('#groupingBoard .grouping-col-head .name[data-group-uuid]').forEach((el) => {
           el.onclick = () => {
             el.contentEditable = 'true';
             el.focus();
@@ -1654,12 +1785,11 @@
             el.contentEditable = 'false';
             const newName = el.textContent.trim().slice(0, 50);
             if (!newName) { el.textContent = '（名無し）'; return; }
-            const gid = Number(el.dataset.groupId);
+            const guuid = el.dataset.groupUuid;
             try {
-              await api('/occurrences/' + groupingState.occId + '/grouping/rename',
-                { method: 'PUT', body: JSON.stringify({ group_id: gid, name: newName }) });
-              // ローカルのキャッシュも更新
-              const g = groupingState.view.groups.find((x) => x.id === gid);
+              await api('/occurrences/' + groupingState.occUuid + '/grouping/rename',
+                { method: 'PUT', body: JSON.stringify({ group_uuid: guuid, name: newName }) });
+              const g = groupingState.view.groups.find((x) => x.uuid === guuid);
               if (g) g.name = newName;
             } catch (e) { toast(e.message, true); }
           };
@@ -1690,23 +1820,22 @@
       }
       function recalcCounts() {
         document.querySelectorAll('#groupingBoard .grouping-cards').forEach((el) => {
-          const gid = el.dataset.groupId;
+          const key = el.dataset.groupKey;
           const c = el.querySelectorAll('.grouping-card').length;
-          const counter = $('#count-' + gid);
+          const counter = document.querySelector('#count-' + (key === 'pool' ? 'pool' : CSS.escape(key)));
           if (counter) counter.textContent = String(c);
         });
       }
       function collectCurrentAssignments() {
-        // 現状の DOM から、各グループに含まれるユーザーID配列を抽出する
+        // 現状の DOM から、各グループに含まれるユーザーID配列を抽出する（group_uuid キー）
         const assignments = [];
-        const groupOf = new Map(); // user_id -> group_id (number or null for pool)
+        const groupOf = new Map(); // user_id -> group_uuid (string) or null for pool
         document.querySelectorAll('#groupingBoard .grouping-cards').forEach((el) => {
-          const raw = el.dataset.groupId;
+          const key = el.dataset.groupKey;
           const userIds = Array.from(el.querySelectorAll('.grouping-card')).map((c) => c.dataset.userId);
-          if (raw !== 'pool') {
-            const gid = Number(raw);
-            assignments.push({ group_id: gid, user_ids: userIds });
-            for (const u of userIds) groupOf.set(u, gid);
+          if (key !== 'pool') {
+            assignments.push({ group_uuid: key, user_ids: userIds });
+            for (const u of userIds) groupOf.set(u, key);
           } else {
             for (const u of userIds) groupOf.set(u, null);
           }
@@ -1778,11 +1907,11 @@
         }
         const opts = candidates.map((c) => `<option value="${esc(c.user_id)}">${esc(c.name)}</option>`).join('');
         const rows = groupingState.constraints.map((c) => `
-          <div class="grouping-constraint-row" data-cid="${c.id}">
+          <div class="grouping-constraint-row" data-cuuid="${esc(c.uuid)}">
             <span>${esc(nameOfUser(c.user_id_a))} ${c.direction === 'together' ? '🤝' : '🚫'} ${esc(nameOfUser(c.user_id_b))}</span>
             <span class="pill ${c.strength === 'required' ? 'off' : 'on'}" style="font-size:11px">${c.strength === 'required' ? '必須' : '推奨'}</span>
             <span class="spacer"></span>
-            <button class="btn sm ghost" data-del-constraint="${c.id}">削除</button>
+            <button class="btn sm ghost" data-del-constraint="${esc(c.uuid)}">削除</button>
           </div>`).join('');
         return `<div class="grouping-constraints-panel">
           <h4>ペア制約（この通知の全開催回で共有）</h4>
@@ -1812,7 +1941,7 @@
           if (!a || !b || a === b) return toast('異なる 2 名を選んでください', true);
           const direction = $('#cDirection').value, strength = $('#cStrength').value;
           try {
-            await api('/notifications/' + groupingState.notifId + '/constraints',
+            await api('/notifications/' + groupingState.notifUuid + '/constraints',
               { method: 'POST', body: JSON.stringify({ user_id_a: a, user_id_b: b, direction, strength }) });
             await reloadGroupingView();
             wireConstraintsPanel();
@@ -1820,9 +1949,9 @@
         };
         document.querySelectorAll('[data-del-constraint]').forEach((b) => {
           b.onclick = async () => {
-            const cid = Number(b.dataset.delConstraint);
+            const cuuid = b.dataset.delConstraint;
             try {
-              await api('/notifications/' + groupingState.notifId + '/constraints/' + cid, { method: 'DELETE' });
+              await api('/notifications/' + groupingState.notifUuid + '/constraints/' + cuuid, { method: 'DELETE' });
               await reloadGroupingView();
               wireConstraintsPanel();
             } catch (e) { toast(e.message, true); }
@@ -1838,14 +1967,12 @@
       };
       async function saveGroupingMembers(silent) {
         if (!groupingState.view || !groupingState.view.grouping) {
-          // 未初期化ならまずグループを作る
           const gc = Number($('#groupingCount').value);
           if (!Number.isInteger(gc) || gc < 1) { toast('グループ数を指定してください', true); return; }
-          await api('/occurrences/' + groupingState.occId + '/grouping',
+          await api('/occurrences/' + groupingState.occUuid + '/grouping',
             { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
           await reloadGroupingView();
         }
-        // 必須違反のチェック
         const { assignments, groupOf } = collectCurrentAssignments();
         const requiredViolations = groupingState.constraints.filter((c) => {
           const ga = groupOf.get(c.user_id_a), gb = groupOf.get(c.user_id_b);
@@ -1858,7 +1985,7 @@
           if (!ok) return;
         }
         try {
-          await api('/occurrences/' + groupingState.occId + '/grouping/members',
+          await api('/occurrences/' + groupingState.occUuid + '/grouping/members',
             { method: 'PUT', body: JSON.stringify({ assignments }) });
           groupingState.dirty = false;
           if (!silent) toast('保存しました');
@@ -1872,7 +1999,7 @@
         }
         if (!(await confirmDialog('現在のグループ分けをチャンネルへ投稿します。', { okLabel: '投稿する' }))) return;
         try {
-          const r = await api('/occurrences/' + groupingState.occId + '/grouping/announce', { method: 'POST' });
+          const r = await api('/occurrences/' + groupingState.occUuid + '/grouping/announce', { method: 'POST' });
           toast(r && r.ok ? '投稿しました' : '投稿に失敗しました', !(r && r.ok));
         } catch (e) { toast(e.message, true); }
       }
@@ -1888,9 +2015,9 @@
               ? `<span class="pill on">ロール管理</span> <span class="pill">${esc(s.mention_role_id)}</span>`
               : '<span class="pill off">手動管理</span>'}</div></div>
           <div class="actions">
-            <button class="btn sm secondary" data-smembers="${s.id}">メンバー</button>
-            <button class="btn sm ghost" data-sedit="${s.id}">編集</button>
-            <button class="btn sm danger" data-sdel="${s.id}">削除</button>
+            <button class="btn sm secondary" data-smembers="${esc(s.uuid)}">メンバー</button>
+            <button class="btn sm ghost" data-sedit="${esc(s.uuid)}">編集</button>
+            <button class="btn sm danger" data-sdel="${esc(s.uuid)}">削除</button>
           </div></div>`).join('');
         $('#sec-segments').innerHTML = `<div class="sec-head"><h2>メンバー区分 (${segs.length})</h2>
             <button class="btn" id="segNewBtn">＋ 新規区分</button></div>
@@ -1920,9 +2047,9 @@
         $('#segNewBtn') && ($('#segNewBtn').onclick = () => { resetSegForm(); $('#segDialog').showModal(); $('#segName').focus(); });
         $('#segClose').onclick = () => $('#segDialog').close();
         $('#segCancel').onclick = () => $('#segDialog').close();
-        document.querySelectorAll('#segMembersDialog [data-segm-close]').forEach((b) => { b.onclick = () => $('#segMembersDialog').close(); });
-        document.querySelectorAll('[data-sedit]').forEach((b) => { b.onclick = () => { fillSegForm(segs.find((s) => s.id === Number(b.dataset.sedit))); $('#segDialog').showModal(); }; });
-        document.querySelectorAll('[data-smembers]').forEach((b) => { b.onclick = () => loadSegmentMembers(Number(b.dataset.smembers)); });
+        document.querySelectorAll('#segMembersDialog [data-segm-close]').forEach((b) => { b.onclick = () => closeSegMembersPage(); });
+        document.querySelectorAll('[data-sedit]').forEach((b) => { b.onclick = () => { fillSegForm(segs.find((s) => s.uuid === b.dataset.sedit)); $('#segDialog').showModal(); }; });
+        document.querySelectorAll('[data-smembers]').forEach((b) => { b.onclick = () => navigate('segments/' + b.dataset.smembers + '/members'); });
         document.querySelectorAll('[data-sdel]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この区分を削除します。', { danger: true, okLabel: '削除' }))) return;
@@ -1937,16 +2064,16 @@
       }
       function fillSegForm(s) {
         if (!s) return;
-        $('#segId').value = s.id; $('#segName').value = s.name; $('#segRole').value = s.mention_role_id || '';
-        $('#segFormTitle').textContent = '編集 (ID: ' + s.id + ')';
+        $('#segId').value = s.uuid; $('#segName').value = s.name; $('#segRole').value = s.mention_role_id || '';
+        $('#segFormTitle').textContent = '編集';
       }
       async function saveSegment() {
         const name = $('#segName').value.trim();
         if (!name) return toast('名前は必須です', true);
         const mention_role_id = $('#segRole').value.trim() || null;
-        const id = $('#segId').value;
+        const uuid = $('#segId').value;
         try {
-          if (id) { await api('/segments/' + id, { method: 'PUT', body: JSON.stringify({ name, mention_role_id }) }); toast('更新しました'); }
+          if (uuid) { await api('/segments/' + uuid, { method: 'PUT', body: JSON.stringify({ name, mention_role_id }) }); toast('更新しました'); }
           else { await api('/segments', { method: 'POST', body: JSON.stringify({ guild_id: guild.id, name, mention_role_id }) }); toast('作成しました'); }
           try { $('#segDialog').close(); } catch (_) {}
           loadSegments();
@@ -1955,16 +2082,15 @@
 
       // ----- 区分メンバー（手動ピッカー / ロール同期・ADR 0009） -----
       let cacheGuildMembers = null;
-      async function loadSegmentMembers(segmentId) {
-        const seg = cacheSegments.find((s) => s.id === segmentId);
+      async function loadSegmentMembers(segUuid) {
+        const seg = cacheSegments.find((s) => s.uuid === segUuid);
         const roleManaged = !!(seg && seg.mention_role_id);
         const isEveryone = !!(seg && seg.mention_role_id === '@everyone');
         let list = [];
-        try { list = await api('/segments/' + segmentId + '/members'); } catch (e) { return toast(e.message, true); }
+        try { list = await api('/segments/' + segUuid + '/members'); } catch (e) { return toast(e.message, true); }
         const rows = list.map((m) => {
           const paused = m.status === '休止中';
           const name = m.display_name || m.user_name || m.user_id;
-          // ロール管理区分は手動「外す」を出さない（同期が支配）。休止/再開は可。
           const delBtn = roleManaged ? '' : `<button class="btn sm danger" data-smdel="${esc(m.user_id)}">外す</button>`;
           return `<div class="pickrow">
             <div>${esc(name)} <span class="muted" style="font-size:12px">${esc(m.user_id)}</span>
@@ -1986,26 +2112,25 @@
           : `<h3 style="margin-top:14px">メンバーを追加</h3>
              <div class="search"><input id="memSearch" placeholder="サーバー参加者を検索（User ID 入力は不要）" /></div>
              <div id="memPicker" style="margin-top:8px"><p class="muted">読み込み中…</p></div>`;
-        $('#segMembersTitle').textContent = `区分メンバー: ${seg ? seg.name : segmentId} (${list.length})`;
+        $('#segMembersTitle').textContent = `区分メンバー: ${seg ? seg.name : segUuid} (${list.length})`;
         $('#segMembersBox').innerHTML = `${list.length ? rows : '<div class="empty">' + emptyMsg + '</div>'}
           ${panel}`;
         const _smd = $('#segMembersDialog'); if (_smd && !_smd.open) _smd.showModal();
         document.querySelectorAll('[data-smtoggle]').forEach((b) => {
           b.onclick = async () => {
-            try { await api('/segments/' + segmentId + '/members/' + encodeURIComponent(b.dataset.smtoggle),
+            try { await api('/segments/' + segUuid + '/members/' + encodeURIComponent(b.dataset.smtoggle),
               { method: 'PUT', body: JSON.stringify({ status: b.dataset.status }) });
-              toast('更新しました'); loadSegmentMembers(segmentId); } catch (e) { toast(e.message, true); }
+              toast('更新しました'); loadSegmentMembers(segUuid); } catch (e) { toast(e.message, true); }
           };
         });
         document.querySelectorAll('[data-smdel]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('このメンバーを区分から外します。', { danger: true, okLabel: '外す' }))) return;
-            try { await api('/segments/' + segmentId + '/members/' + encodeURIComponent(b.dataset.smdel), { method: 'DELETE' });
-              toast('外しました'); loadSegmentMembers(segmentId); } catch (e) { toast(e.message, true); }
+            try { await api('/segments/' + segUuid + '/members/' + encodeURIComponent(b.dataset.smdel), { method: 'DELETE' });
+              toast('外しました'); loadSegmentMembers(segUuid); } catch (e) { toast(e.message, true); }
           };
         });
 
-        // ロール管理区分: 手動同期ボタン（破壊的確認つき）。ピッカーは出さない。
         if (roleManaged) {
           $('#segSyncBtn').onclick = (e) => withBusy(e.currentTarget, async () => {
             const warn = isEveryone
@@ -2013,16 +2138,15 @@
               : 'Discord ロールからメンバーを同期します。ロール非保有の現メンバーは区分から外れます。';
             if (!(await confirmDialog(warn, { okLabel: '同期する', danger: true }))) return;
             try {
-              const r = await api('/segments/' + segmentId + '/sync-from-role', { method: 'POST' });
+              const r = await api('/segments/' + segUuid + '/sync-from-role', { method: 'POST' });
               toast(r && r.message ? r.message : '同期しました');
               try { cacheSegments = await api('/segments?guild_id=' + encodeURIComponent(guild.id)); } catch (_) {}
-              loadSegmentMembers(segmentId);
+              loadSegmentMembers(segUuid);
             } catch (e) { toast(e.message, true); }
           });
           return;
         }
 
-        // メンバーピッカー（手動区分のみ・サーバー在籍をライブ取得）
         const already = new Set(list.map((m) => m.user_id));
         if (!cacheGuildMembers) {
           try { cacheGuildMembers = await api('/guilds/' + guild.id + '/members'); }
@@ -2043,9 +2167,9 @@
             b.onclick = async () => {
               const m = cacheGuildMembers.find((x) => x.user_id === b.dataset.add);
               try {
-                await api('/segments/' + segmentId + '/members', { method: 'POST',
+                await api('/segments/' + segUuid + '/members', { method: 'POST',
                   body: JSON.stringify({ user_id: m.user_id, user_name: m.user_name, display_name: m.display_name }) });
-                toast('追加しました'); loadSegmentMembers(segmentId);
+                toast('追加しました'); loadSegmentMembers(segUuid);
               } catch (e) { toast(e.message, true); }
             };
           });
@@ -2178,8 +2302,20 @@
       function boot() {
         if (!token) return showGate();
         const saved = localStorage.getItem(GUILD_KEY);
-        const hash = (location.hash || '').replace('#', '');
-        if (saved) { try { const g = JSON.parse(saved); if (!hash || hash === g.id) { guild = g; return showWorkspace(); } } catch (_) {} }
+        // 新形式 `g/<gid>/...`、旧形式 `<gid>`、空のいずれも許容（旧→新は自動補正）
+        const { guildId } = parseHash();
+        if (saved) {
+          try {
+            const g = JSON.parse(saved);
+            if (!guildId || guildId === g.id) {
+              guild = g;
+              showWorkspace();
+              // 初期ハッシュが `g/<gid>/...` 形式ならルータでモーダル復帰、なければ何もしない
+              handleHashRoute();
+              return;
+            }
+          } catch (_) {}
+        }
         showPicker();
       }
       boot();
