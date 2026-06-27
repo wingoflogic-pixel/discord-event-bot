@@ -147,28 +147,33 @@ export async function checkQuotaForNotification(
   return alerts;
 }
 
-/** 管理 UI: 直近の回答を取得（新しい順）。occurrences / notifications を JOIN */
+/**
+ * 管理 UI: 直近の回答を取得（新しい順）。occurrences / notifications を JOIN。
+ * guildId 指定時は notifications.guild_id でサーバー単位に絞る（未指定は全サーバー横断）。
+ */
 export async function listRecentResponses(
   db: D1Database,
   limit = 200,
+  guildId?: string,
 ): Promise<
   Array<Response & { occurrence_date: string; occurrence_time: string; notification_name: string }>
 > {
-  const { results } = await db
-    .prepare(
-      `SELECT r.occurrence_id, r.user_id, r.user_name, r.status, r.updated_at, r.post_deadline_change,
-              o.occurrence_date AS occurrence_date, o.start_time AS occurrence_time,
-              n.name AS notification_name
-         FROM responses r
-         JOIN occurrences o ON o.id = r.occurrence_id
-         JOIN notifications n ON n.id = o.notification_id
-        ORDER BY o.occurrence_date DESC, o.start_time DESC, r.updated_at DESC
-        LIMIT ?`,
-    )
-    .bind(limit)
-    .all<
-      Response & { occurrence_date: string; occurrence_time: string; notification_name: string }
-    >();
+  const where = guildId ? 'WHERE n.guild_id = ?' : '';
+  const stmt = db.prepare(
+    `SELECT r.occurrence_id, r.user_id, r.user_name, r.status, r.updated_at, r.post_deadline_change,
+            o.occurrence_date AS occurrence_date, o.start_time AS occurrence_time,
+            n.name AS notification_name
+       FROM responses r
+       JOIN occurrences o ON o.id = r.occurrence_id
+       JOIN notifications n ON n.id = o.notification_id
+       ${where}
+      ORDER BY o.occurrence_date DESC, o.start_time DESC, r.updated_at DESC
+      LIMIT ?`,
+  );
+  const bound = guildId ? stmt.bind(guildId, limit) : stmt.bind(limit);
+  const { results } = await bound.all<
+    Response & { occurrence_date: string; occurrence_time: string; notification_name: string }
+  >();
   return results;
 }
 

@@ -267,7 +267,11 @@
       
       /* ---------- App shell: topbar / sidebar / main / cards ---------- */
       .shell { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 57px); }
-      .side { border-right: 1px solid var(--border); padding: 14px 10px; background: var(--panel); }
+      .side {
+        border-right: 1px solid var(--border); padding: 14px 10px; background: var(--panel);
+        position: sticky; top: 57px; align-self: flex-start;
+        max-height: calc(100vh - 57px); overflow-y: auto;
+      }
       .side .navitem {
         display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: var(--r-sm);
         color: var(--muted); cursor: pointer; margin-bottom: 3px; font-weight: 500; user-select: none;
@@ -415,7 +419,11 @@
       /* ---------- Responsive ---------- */
       @media (max-width: 720px) {
         .shell { grid-template-columns: 1fr; min-height: 0; }
-        .side { border-right: none; border-bottom: 1px solid var(--border); display: flex; gap: 6px; overflow-x: auto; padding: 10px; }
+        .side {
+          border-right: none; border-bottom: 1px solid var(--border);
+          display: flex; gap: 6px; overflow-x: auto; padding: 10px;
+          position: static; max-height: none; overflow-y: visible;
+        }
         .side .navitem { margin: 0; white-space: nowrap; }
         main { padding: 16px; }
       }
@@ -1379,14 +1387,6 @@
                   <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nQuota" aria-label="ノルマ（参加間隔の督促）" /><span class="switch-slider"></span></label></div>
                 </div>
                 <div id="nQuotaBox" class="hidden" style="max-width:280px"><label>ノルマ間隔（日数）</label><input id="nQuotaInterval" type="number" placeholder="例: 30" /></div>
-                <div class="setting-row" id="nAssignmentRow">
-                  <div class="setting-row-main"><div class="setting-row-title">番号割り当て</div><div class="setting-row-desc">参加者に連番 1..N をランダムに割り当てます（個室・座席等）。</div></div>
-                  <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nAssignment" aria-label="番号割り当て" /><span class="switch-slider"></span></label></div>
-                </div>
-                <div class="setting-row" id="nGroupingRow">
-                  <div class="setting-row-main"><div class="setting-row-title">グループ分け</div><div class="setting-row-desc">参加者を複数のグループに分割します（管理画面でドラッグ＆ドロップ・ペア制約対応）。</div></div>
-                  <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nGrouping" aria-label="グループ分け" /><span class="switch-slider"></span></label></div>
-                </div>
 
                 <div class="subhead">状態</div>
                 <div class="setting-row">
@@ -1418,13 +1418,12 @@
         $('#nMonthlyBox').classList.toggle('hidden', !monthly);
         $('#nWeekdayBox').classList.toggle('hidden', monthly);
         $('#nNextBox').classList.toggle('hidden', mode !== 'biweekly');
-        // 回答不要(通知のみ)は回答依存の機能（リマインド/ノルマ/番号/締切）を隠す（ADR 0010/0014）。
+        // 回答不要(通知のみ)は回答依存の機能（リマインド/ノルマ/締切）を隠す（ADR 0010/0014）。
+        // 番号割り当て/グループ分けは ADR 0017 で標準機能化し、フォームにはトグルが無くなった。
         const announceOnly = !$('#nRequireResponse').checked;
-        if (announceOnly) { $('#nQuota').checked = false; $('#nAssignment').checked = false; $('#nGrouping').checked = false; }
+        if (announceOnly) { $('#nQuota').checked = false; }
         $('#nQuotaRow').classList.toggle('hidden', announceOnly);
         $('#nQuotaBox').classList.toggle('hidden', announceOnly || !$('#nQuota').checked);
-        $('#nAssignmentRow').classList.toggle('hidden', announceOnly);
-        $('#nGroupingRow').classList.toggle('hidden', announceOnly);
         $('#nRemindStartBox').classList.toggle('hidden', announceOnly);
         $('#nRemindUndecidedBox').classList.toggle('hidden', announceOnly);
         $('#nDeadlineBox').classList.toggle('hidden', announceOnly);
@@ -1529,7 +1528,7 @@
         $('#nStartTime').value = '21:00'; $('#nDuration').value = ''; $('#nRecruit').value = '7';
         $('#nRemindStart').value = '3'; $('#nRemindUndecided').value = '1';
         $('#nQuotaInterval').value = '';
-        $('#nQuota').checked = false; $('#nAssignment').checked = false;
+        $('#nQuota').checked = false;
         $('#nMention').value = 'role'; $('#nRequireResponse').checked = true; $('#nActive').checked = true;
         $('#nSendHour').value = '21'; $('#nDeadlineHours').value = ''; $('#nAlertChannel').value = '';
         if ($('#nAdvanced')) $('#nAdvanced').open = false;
@@ -1559,8 +1558,7 @@
         $('#nRecruit').value = n.recruit_days_before; $('#nRemindStart').value = n.remind_start_days;
         $('#nRemindUndecided').value = n.remind_undecided_days;
         $('#nQuotaInterval').value = n.quota_interval_days == null ? '' : n.quota_interval_days;
-        $('#nQuota').checked = !!n.quota_enabled; $('#nAssignment').checked = !!n.assignment_enabled;
-        $('#nGrouping').checked = !!n.grouping_enabled;
+        $('#nQuota').checked = !!n.quota_enabled;
         $('#nMention').value = n.mention_mode || 'role';
         $('#nRequireResponse').checked = n.requires_response == null ? true : !!n.requires_response;
         $('#nActive').checked = !!n.active;
@@ -1594,8 +1592,8 @@
           remind_undecided_days: numOrDefault('nRemindUndecided', 1),
           quota_enabled: $('#nQuota').checked ? 1 : 0,
           quota_interval_days: qi === '' ? null : Number(qi),
-          assignment_enabled: $('#nAssignment').checked ? 1 : 0,
-          grouping_enabled: $('#nGrouping').checked ? 1 : 0,
+          assignment_enabled: 1,
+          grouping_enabled: 1,
           mention_mode: $('#nMention').value,
           requires_response: $('#nRequireResponse').checked ? 1 : 0,
           // ③ 送信時刻・① 回答締切/変更通知チャンネル
@@ -1667,8 +1665,8 @@
             <div>${esc(occLabel(o, n && n.duration_minutes))} <span class="pill ${pillCls}">${label}</span>
               <br><span class="muted" id="tally-${cssId(o.uuid)}" style="font-size:12px">集計中…</span></div>
             <div class="actions">${decideBtn}${undecideBtn}
-              ${n && n.assignment_enabled ? `<button class="btn sm secondary" data-occ="${esc(o.uuid)}">番号割り当て</button>` : ''}
-              ${n && n.grouping_enabled ? `<button class="btn sm secondary" data-grouping-occ="${esc(o.uuid)}" data-nuuid="${esc(notifUuid)}">グループ分け</button>` : ''}</div></div>`;
+              <button class="btn sm secondary" data-occ="${esc(o.uuid)}">番号割り当て</button>
+              <button class="btn sm secondary" data-grouping-occ="${esc(o.uuid)}" data-nuuid="${esc(notifUuid)}">グループ分け</button></div></div>`;
         }).join('');
         const recruitBtn = n
           ? `` : '';
@@ -2274,9 +2272,11 @@
       // ================= 回答履歴 =================
       async function loadRecords() {
         let responses = [];
-        try { responses = await api('/responses?limit=200'); } catch (e) { toast(e.message, true); }
+        try {
+          responses = await api('/responses?limit=200&guild_id=' + encodeURIComponent(guild.id));
+        } catch (e) { toast(e.message, true); }
         $('#sec-records').innerHTML = `<h2>回答履歴</h2>
-          <p class="muted">直近 ${responses.length} 件（全サーバー横断）。列ヘッダのクリックでソート、各列下で絞り込み、ヘッダのドラッグで並べ替え。</p>
+          <p class="muted">直近 ${responses.length} 件（このサーバー: ${esc(guild.name || guild.id)}）。列ヘッダのクリックでソート、各列下で絞り込み、ヘッダのドラッグで並べ替え。</p>
           <div id="recordsTable"></div>`;
         if (!responses.length) {
           $('#recordsTable').innerHTML = '<div class="empty">まだ回答がありません。募集を投稿し、メンバーがボタンで回答すると、ここに表示されます。</div>';
@@ -2299,10 +2299,12 @@
 
       async function loadSendLog() {
         let logs = [];
-        try { logs = await api('/send-log?limit=300'); } catch (e) { toast(e.message, true); }
+        try {
+          logs = await api('/send-log?limit=300&guild_id=' + encodeURIComponent(guild.id));
+        } catch (e) { toast(e.message, true); }
         const kindLabel = { recruit: '募集', remind_unanswered: '未回答リマインド', remind_undecided: '未定リマインド', quota: 'ノルマ', deadline_notice: '締切告知' };
         $('#sec-sendlog').innerHTML = `<h2>リマインド送信履歴</h2>
-          <p class="muted">cron が送った募集・リマインド・ノルマ・締切告知の記録（直近 ${logs.length} 件・全サーバー横断）。DM 拒否などの失敗もここで確認できます。</p>
+          <p class="muted">cron が送った募集・リマインド・ノルマ・締切告知の記録（直近 ${logs.length} 件・このサーバー: ${esc(guild.name || guild.id)}）。DM 拒否などの失敗もここで確認できます。</p>
           <div id="sendlogTable"></div>`;
         if (!logs.length) {
           $('#sendlogTable').innerHTML = '<div class="empty">まだ送信記録がありません。送信時刻になると cron が送信し、ここに記録されます。</div>';

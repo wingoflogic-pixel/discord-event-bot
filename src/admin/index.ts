@@ -753,14 +753,22 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     // ============ responses ============
     if (path === '/responses' && method === 'GET') {
       const limit = parseLimit(url.searchParams.get('limit'), 200);
-      return json(await listRecentResponses(db, limit));
+      const guildId = url.searchParams.get('guild_id') || undefined;
+      return json(await listRecentResponses(db, limit, guildId));
     }
 
     // ============ send-log（リマインド送信履歴・④可視化）============
     if (path === '/send-log' && method === 'GET') {
       const limit = parseLimit(url.searchParams.get('limit'), 300);
       const nid = url.searchParams.get('notification_id');
-      return json(await listSendLog(db, { limit, notificationId: nid ? Number(nid) : undefined }));
+      const guildId = url.searchParams.get('guild_id') || undefined;
+      return json(
+        await listSendLog(db, {
+          limit,
+          notificationId: nid ? Number(nid) : undefined,
+          guildId,
+        }),
+      );
     }
 
     // ============ config（送信予算など実行時設定・⑦）============

@@ -85,27 +85,42 @@ export async function isSendLogged(db: D1Database, k: SendKey): Promise<boolean>
   return row != null;
 }
 
-/** 管理 UI: リマインド送信履歴を取得（新しい順）。notifications / occurrences を JOIN。 */
+/**
+ * 管理 UI: リマインド送信履歴を取得（新しい順）。notifications / occurrences を JOIN。
+ * guildId 指定時は notifications.guild_id でサーバー単位に絞る（未指定は全サーバー横断）。
+ */
 export async function listSendLog(
   db: D1Database,
-  opts: { limit?: number; notificationId?: number } = {},
+  opts: { limit?: number; notificationId?: number; guildId?: string } = {},
 ): Promise<SendLogListItem[]> {
   const limit = opts.limit ?? 300;
-  const where = opts.notificationId ? 'WHERE s.notification_id = ?' : '';
-  const stmt = db.prepare(
-    `SELECT s.id, s.notification_id, s.occurrence_id, s.user_id, s.kind, s.send_date,
-            s.status, s.error, s.created_at,
-            n.name AS notification_name,
-            COALESCE(m.display_name, m.user_name) AS user_name,
-            (SELECT o.occurrence_date FROM occurrences o WHERE o.id = s.occurrence_id AND s.occurrence_id != 0) AS occurrence_date
-       FROM send_log s
-       JOIN notifications n ON n.id = s.notification_id
-       LEFT JOIN members m ON m.user_id = s.user_id
-       ${where}
-      ORDER BY s.created_at DESC
-      LIMIT ?`,
-  );
-  const bound = opts.notificationId ? stmt.bind(opts.notificationId, limit) : stmt.bind(limit);
-  const { results } = await bound.all<SendLogListItem>();
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  if (opts.notificationId) {
+    conds.push('s.notification_id = ?');
+    params.push(opts.notificationId);
+  }
+  if (opts.guildId) {
+    conds.push('n.guild_id = ?');
+    params.push(opts.guildId);
+  }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  params.push(limit);
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.notification_id, s.occurrence_id, s.user_id, s.kind, s.send_date,
+              s.status, s.error, s.created_at,
+              n.name AS notification_name,
+              COALESCE(m.display_name, m.user_name) AS user_name,
+              (SELECT o.occurrence_date FROM occurrences o WHERE o.id = s.occurrence_id AND s.occurrence_id != 0) AS occurrence_date
+         FROM send_log s
+         JOIN notifications n ON n.id = s.notification_id
+         LEFT JOIN members m ON m.user_id = s.user_id
+         ${where}
+        ORDER BY s.created_at DESC
+        LIMIT ?`,
+    )
+    .bind(...params)
+    .all<SendLogListItem>();
   return results;
 }
