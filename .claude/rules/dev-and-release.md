@@ -19,16 +19,19 @@ paths:
 - ローカル検証は `.dev.vars`（テスト用Discordアプリ＋ダミーサーバーの値のみ）。本番値の混入は厳禁。`npm test` / `npm run typecheck` を回す。
 - 仕上げ検証はデプロイ済みテストWorker（テスト用Discordに接続）で行う（ADR 0008）。
 
-## 設定ファイル（wrangler.jsonc）
-- 配布用 `wrangler.jsonc` の `d1_databases[]` には `database_id` を**記載しない（省略する）**。省略すると利用者の fork を接続した Workers Builds が D1 を自動生成する。実IDをベタ書きすると利用者のデプロイが失敗する。`.toml` ではなく `jsonc` を使うのは自動生成IDの書き戻し問題（issue #13632）回避のため。
+## 設定ファイル（wrangler.jsonc — unified）
+- `wrangler.jsonc` は **全ブランチ共通（unified）**。base = 配布／本番設定、`env.staging` 上書きで staging 用 name/d1 を分離する。詳細は [repo-and-environments.md](./repo-and-environments.md)。
+- 配布用 `wrangler.jsonc`（base）の `d1_databases[]` には `database_id` を**記載しない（省略する）**。省略すると利用者の fork を接続した Workers Builds が D1 を自動生成する。実IDをベタ書きすると利用者のデプロイが失敗する。`.toml` ではなく `jsonc` を使うのは自動生成IDの書き戻し問題（issue #13632）回避のため。
+- `env.staging.d1_databases[]` は staging 用に **`database_id` を明記**してよい（利用者は `--env staging` を使わないため id 漏洩リスクなし＋自動プロビジョニング曖昧性を排除して決定的にする）。
 - `wrangler` 下限は **`^4.102.0`**（id 省略＋バインディング名 `DB` でのマイグレーション解決＝PR #14275 が初収録された版）。`package.json` 変更時は `@emnapi` ピン留めを崩さないよう lockfile は npm10 で扱う。
 - 保守者ローカル専用の `wrangler.local.jsonc`（実 `database_id`・**gitignore 済み・配布しない**）は、移行期に CLI から本番へデプロイするためだけに使う。
 
 ## デプロイ
-- **素の `npm run deploy`（`wrangler deploy && db:migrate:remote`）は Workers Builds 用**（利用者の fork 接続・開発者の staging/prod）。配布用 `wrangler.jsonc` は `database_id` 省略のため、まず `wrangler deploy` で D1 を自動作成し id を `wrangler.jsonc` に書き戻してから `db:migrate:remote` がその id を解決してマイグレーションを適用する（未作成のDBには先にマイグレーションを当てられないためこの順）。ローカルから素で実行すると別D1を自動生成してしまう（ローカル本番デプロイには使わない）。
-- 保守者がローカルCLIから本番Choiemuへデプロイするときは **`npm run deploy:cli`**（`wrangler.local.jsonc` を `--config` 指定）。`deploy:cli` は実IDで本番D1が既存のため、従来どおり本番D1へマイグレーションを適用してからデプロイする（`npm run deploy` とは順番が逆）。
-- これは本番Choiemu操作にあたる。CLAUDE.md のルールに従い、実行前に必ずユーザー許可を得る。
-- マイグレーションはバインディング名 `DB` で指定する（`wrangler d1 migrations apply DB --remote`）。利用者の fork 接続デプロイ時に各利用者のD1が別名で生成されるため、バインディング名で統一する。
+- **本番**: `npm run deploy`（= `wrangler deploy && db:migrate:remote`）。Workers Builds の本番プロジェクト Deploy command にも同じものを指定。base 設定が `discord-event-bot` / `choiemu-event-bot-db` を狙う。`database_id` 省略のため、まず `wrangler deploy` で D1 を自動作成（既存なら再利用）し id を `wrangler.jsonc` に書き戻してから `db:migrate:remote` がその id を解決してマイグレーションを適用する（未作成のDBには先にマイグレーションを当てられないためこの順）。
+- **②検証 staging**: `npm run deploy:staging`（= `wrangler deploy --env staging && wrangler d1 migrations apply DB --remote --env staging`）。Workers Builds の staging プロジェクトは Deploy command を **必ず `npm run deploy:staging` に設定**すること。素の `npm run deploy` を指定すると base = 本番 Worker を狙い、staging push が**本番にデプロイされる事故**になる（要厳守）。
+- 保守者がローカルCLIから本番Choiemuへ直接デプロイするときは **`npm run deploy:cli`**（`wrangler.local.jsonc` を `--config` 指定）。`deploy:cli` は実IDで本番D1が既存のため、従来どおり本番D1へマイグレーションを適用してからデプロイする（`npm run deploy` とは順番が逆）。
+- 上記すべて本番Choiemu到達しうる操作にあたる。CLAUDE.md のルールに従い、実行前に必ずユーザー許可を得る。
+- マイグレーションはバインディング名 `DB` で指定する（`wrangler d1 migrations apply DB --remote [--env staging]`）。利用者の fork 接続デプロイ時に各利用者のD1が別名で生成されるため、バインディング名で統一する。
 - **方針（ADR 0012）**: 本番・検証とも最終的に GitHub→Cloudflare（Workers Builds）経路へ寄せ、`deploy:cli`（ローカルCLIリモートデプロイ）は Workers Builds 本番の立ち上げ後に撤去する移行措置。
 
 ## 配信・更新

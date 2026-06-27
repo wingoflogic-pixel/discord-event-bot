@@ -11,7 +11,7 @@ Cloudflare Workers + D1 で稼働する Discord イベント出欠/勤怠Bot（`
 本番 Choiemu サーバー／チャンネルに影響が及びうる操作は、実行前に必ずユーザーへ明示的に許可を取ること。
 
 特に以下は本番へ到達しうるため要注意:
-- **`git push origin main` → Workers Builds が本番 Worker（`discord-event-bot`）を自動デプロイする**（＝本番操作。`git push` は git だけではない）。`origin/staging` への push は ②staging を自動デプロイ（本番は無影響）。`npm run deploy` / `npm run deploy:cli` も本番到達しうる。詳細は `.claude/rules/repo-and-environments.md`。
+- **`git push origin main` → Workers Builds が本番 Worker（`discord-event-bot`）を自動デプロイする**（＝本番操作。`git push` は git だけではない）。`origin/staging` への push は ②staging を自動デプロイ（本番は無影響・**ただし staging プロジェクトの Deploy command が `npm run deploy:staging` に設定されていることが大前提**。素の `npm run deploy` だと base = 本番を狙うため staging push が本番に飛ぶ事故になる）。`npm run deploy` / `npm run deploy:staging` / `npm run deploy:cli` も本番到達しうる。詳細は `.claude/rules/repo-and-environments.md`。
 - `wrangler dev` / `wrangler dev --test-scheduled`（v4 は `.env` を自動読込し、本番 `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_ID` が使われると本番チャンネルへ投稿する）
 - 本番 Discord アプリのトークン・チャンネルID・Interaction Endpoint を伴う実行・設定変更
 - 本番 Discord へのメッセージ送信・DM・スラッシュコマンド登録

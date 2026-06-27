@@ -44,3 +44,19 @@
 - **検証はローカル CLI のまま（②＝CLI／③＝Workers Builds）**: デプロイ機構が本番と分かれ、環境差由来のエラーを②で検出できない。本 ADR が解こうとした問題そのものが残る。
 - **本番もローカル CLI のまま（`database_id` をベタ書き）**: 配布（利用者本番）で `database_id` の省略が必須になるため、保守者本番だけ別設定を維持し続けることになり、parity が崩れる。省略に伴うローカル別 D1 生成の副作用も解消されない。
 - **本番とは別に検証専用の Cloudflare アカウントを用意**: 機構の同一性は得られるが、アカウント・課金・シークレットの二重管理コストが増える。同一アカウント内で staging／prod の Worker を分ける方が軽い。
+
+## 追補 — wrangler.jsonc の unified 化（2026-06-27）
+
+導入当初は `main`/`public` ブランチに「配布版 wrangler.jsonc」、`staging` ブランチに「隔離版 wrangler.jsonc（`*-staging` 名）」を別々に持ち、「staging を main へマージしない」「main 反映は別 worktree で `git checkout staging -- .` → `git checkout HEAD -- wrangler.jsonc`」という運用にしていた。これにより:
+
+- `main` と `staging` の `git merge-base` がリリース時の手動「内容コピー」コミットでしか進まず、PR/IDE のブランチ比較が「実差分は数ファイルなのに +2,700/-400」のような巨大 diff を出し続けた。
+- 反映ごとに wrangler.jsonc の差し戻し手作業が必要で、ドリフト/事故源だった。
+
+これを解消するため、`wrangler.jsonc` を **全ブランチ共通（unified）** に変更した。
+
+- base = 配布／本番設定（`name: discord-event-bot` / `database_name: choiemu-event-bot-db` / `database_id` 省略）。`main`/`public/main` の従来の中身。
+- `env.staging` 上書きで staging 用の `d1_databases`（`choiemu-event-bot-db-staging` / `id` 明記）を分離。Worker 名は `name` 未指定で base + `-staging` 自動サフィックス＝`discord-event-bot-staging`。`triggers`(crons) / `assets` / `compatibility_*` は env block へ自動継承（[Wrangler Environments](https://developers.cloudflare.com/workers/wrangler/environments/) 公式記述）。
+- `package.json` に **`deploy:staging`**（= `wrangler deploy --env staging && wrangler d1 migrations apply DB --remote --env staging`）を追加。Workers Builds の staging プロジェクト Deploy command を `npm run deploy` → **`npm run deploy:staging`** に変更（本番プロジェクトは `npm run deploy` のまま）。
+- 旧「staging を main へマージしない」ルールは廃止。unified 化により main↔staging を正式マージできるため、通常の GitHub フローに戻った。
+
+**事故ポイント（要厳守）**: staging プロジェクトの Deploy command が誤って素の `npm run deploy` のままだと、base = 本番 Worker を狙うため staging push が **本番にデプロイされる**。Workers Builds 側の設定が唯一のガード。
