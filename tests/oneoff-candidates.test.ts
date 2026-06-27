@@ -151,10 +151,10 @@ describe('スロットごとの独立した出欠集計', () => {
     expect(b19.参加).toEqual(['D1']);
     expect(b21.不参加).toEqual(['D1']);
 
-    // 割り当ても occurrence 単位で独立
-    const a19 = await assignNumbers(db(), s19.id);
+    // 割り当ても occurrence 単位で独立（ADR 0018: mode 必須）
+    const a19 = await assignNumbers(db(), s19.id, 'first-come');
     expect(a19.all.map((a) => a.user_id)).toEqual(['u1']); // 参加者のみ
-    const a21 = await assignNumbers(db(), s21.id);
+    const a21 = await assignNumbers(db(), s21.id, 'first-come');
     expect(a21.all).toHaveLength(0); // 不参加は対象外
   });
 });

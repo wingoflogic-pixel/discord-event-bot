@@ -37,7 +37,7 @@ import {
   type CandidateSlot,
 } from '../db/occurrences';
 import { getResponsesForOccurrence, getStatusBuckets, listRecentResponses } from '../db/responses';
-import { getAssignments, assignNumbers } from '../db/assignments';
+import { getAssignments, assignNumbers, type AssignMode } from '../db/assignments';
 import {
   getGroupingView,
   getGroupByUuid,
@@ -523,12 +523,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     // ============ occurrences ============
-    // /occurrences/:uuid/assign
+    // /occurrences/:uuid/assign  body: { mode: 'first-come' | 'random' }
+    // ADR 0018: 既存番号は全クリアされ 1..N で振り直される。
     const occAssign = path.match(new RegExp(`^/occurrences/(${UUID_RE})/assign$`));
     if (occAssign && method === 'POST') {
       const occ = await getOccurrenceByUuid(db, occAssign[1]);
       if (!occ) return json({ error: 'Not found' }, 404);
-      return json(await assignNumbers(db, occ.id));
+      const b = (await request.json().catch(() => ({}))) as { mode?: string };
+      const mode: AssignMode | null =
+        b.mode === 'first-come' ? 'first-come' : b.mode === 'random' ? 'random' : null;
+      if (!mode) return json({ error: "mode must be 'first-come' or 'random'" }, 400);
+      return json(await assignNumbers(db, occ.id, mode));
     }
     // /occurrences/:uuid/responses
     const occResponses = path.match(new RegExp(`^/occurrences/(${UUID_RE})/responses$`));

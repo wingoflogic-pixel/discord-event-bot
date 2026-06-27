@@ -270,7 +270,7 @@
       .side {
         border-right: 1px solid var(--border); padding: 14px 10px; background: var(--panel);
         position: sticky; top: 57px; align-self: flex-start;
-        max-height: calc(100vh - 57px); overflow-y: auto;
+        height: calc(100vh - 57px); overflow-y: auto;
       }
       .side .navitem {
         display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: var(--r-sm);
@@ -1207,7 +1207,7 @@
                 ${sched} ・ ${esc(chName(n.channel_id))}</div></div>
             <div class="actions">
               <span class="pill ${n.active ? 'on' : 'off'}">${n.active ? '有効' : '無効'}</span>
-              <button class="btn sm ghost" data-nrecruit="${esc(n.uuid)}">📣 募集</button>
+              <button class="btn sm ghost" data-nrecruit="${esc(n.uuid)}">📣 投稿</button>
               <button class="btn sm ghost" data-nedit="${esc(n.uuid)}">編集</button>
               <button class="btn sm ghost" data-nocc="${esc(n.uuid)}">番号割り当て/グループ分け</button>
               <button class="btn sm ghost danger" data-ndel="${esc(n.uuid)}">削除</button>
@@ -1710,13 +1710,21 @@
         $('#assignBox').innerHTML = `<h3 style="margin-top:14px">番号割り当て</h3>
           ${list && list.length ? `<table><thead><tr><th>番号</th><th>表示名</th><th>User ID</th></tr></thead><tbody>${rows}</tbody></table>`
             : '<p class="muted">割り当てはまだありません。</p>'}
-          <div class="actions" style="margin-top:10px"><button class="btn" id="runAssign" data-occ="${esc(occUuid)}">番号割り当てを実行</button></div>`;
-        $('#runAssign').onclick = async () => {
-          if (!(await confirmDialog('この開催日で番号割り当てを実行します。', { okLabel: '実行する' }))) return;
-          try { const res = await api('/occurrences/' + occUuid + '/assign', { method: 'POST' });
-            toast(`割り当て実行: 新規 ${res && res.assigned ? res.assigned.length : 0} 名`);
-            renderAssignments(occUuid, res && res.all ? res.all : []); } catch (e) { toast(e.message, true); }
+          <p class="muted" style="font-size:12px;margin-top:8px">実行すると既存の番号は破棄され、参加者全員に 1..N で振り直します（ADR 0018）。</p>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn" id="runAssignFirstCome" data-occ="${esc(occUuid)}">早い順で割り当て</button>
+            <button class="btn secondary" id="runAssignRandom" data-occ="${esc(occUuid)}">ランダムで割り当て</button>
+          </div>`;
+        const run = async (mode, label) => {
+          if (!(await confirmDialog(`この開催日で番号割り当てを実行します（${label}）。既存の番号は破棄され、新しく振り直されます。`, { okLabel: '実行する' }))) return;
+          try {
+            const res = await api('/occurrences/' + occUuid + '/assign', { method: 'POST', body: JSON.stringify({ mode }) });
+            toast(`割り当て実行（${label}）: ${res && res.all ? res.all.length : 0} 名`);
+            renderAssignments(occUuid, res && res.all ? res.all : []);
+          } catch (e) { toast(e.message, true); }
         };
+        $('#runAssignFirstCome').onclick = () => run('first-come', '早い順');
+        $('#runAssignRandom').onclick = () => run('random', 'ランダム');
       }
       async function loadAssignments(occUuid) {
         try { renderAssignments(occUuid, await api('/occurrences/' + occUuid + '/assignments')); } catch (e) { toast(e.message, true); }

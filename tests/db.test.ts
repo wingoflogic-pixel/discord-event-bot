@@ -198,8 +198,8 @@ describe('checkQuotaForNotification', () => {
   });
 });
 
-describe('assignNumbers（安定割り当て）', () => {
-  /** その occurrence で「参加」と回答した member を用意 */
+describe('assignNumbers（ADR 0018: 2 モード・全振り直し）', () => {
+  /** その occurrence で「参加」と回答した member を用意（順次 upsert で updated_at に差を付ける） */
   async function setupParticipants(occId: number, userIds: string[]) {
     for (const uid of userIds) {
       await addMember(db(), uid, `name_${uid}`, `Disp_${uid}`);
@@ -207,69 +207,88 @@ describe('assignNumbers（安定割り当て）', () => {
     }
   }
 
-  it('参加者全員に 1..N の重複なし番号を振る', async () => {
+  it("mode='first-come': 参加者全員に 1..N を回答時刻の早い順で振る", async () => {
     const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
     const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
-    await setupParticipants(occId, ['u1', 'u2', 'u3']);
+    // 1 つずつ間隔を空けて updated_at に差を付ける
+    await setupParticipants(occId, ['u_third']);
+    await new Promise((r) => setTimeout(r, 5));
+    await setupParticipants(occId, ['u_first']);
+    await new Promise((r) => setTimeout(r, 5));
+    await setupParticipants(occId, ['u_second']);
+    // 各人の最終回答時刻に再差を付けるため、希望順に再 upsert
+    await new Promise((r) => setTimeout(r, 5));
+    await upsertResponse(db(), occId, 'u_first', 'name_u_first', '参加');
+    await new Promise((r) => setTimeout(r, 5));
+    await upsertResponse(db(), occId, 'u_second', 'name_u_second', '参加');
+    await new Promise((r) => setTimeout(r, 5));
+    await upsertResponse(db(), occId, 'u_third', 'name_u_third', '参加');
 
-    const { assigned, all } = await assignNumbers(db(), occId);
+    const { assigned, all } = await assignNumbers(db(), occId, 'first-come');
     expect(assigned).toHaveLength(3);
     expect(all).toHaveLength(3);
-
-    const numbers = all.map((a) => a.number).sort((x, y) => x - y);
-    expect(numbers).toEqual([1, 2, 3]); // 1..N 連番・重複なし
-    expect(new Set(all.map((a) => a.user_id)).size).toBe(3);
-    // all は number 昇順
+    // 早い順: u_first → u_second → u_third
+    expect(all.map((a) => a.user_id)).toEqual(['u_first', 'u_second', 'u_third']);
     expect(all.map((a) => a.number)).toEqual([1, 2, 3]);
-    // 名前は resolveDisplayName 相当（display_name 優先）
     expect(all.every((a) => a.name.startsWith('Disp_'))).toBe(true);
   });
 
-  it('再実行で既存番号を維持し、新規参加者にのみ空き番号を採番（重複なし）', async () => {
+  it("mode='first-come': 同一 updated_at は user_id 昇順でタイブレーク", async () => {
     const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
     const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
-    await setupParticipants(occId, ['u1', 'u2']);
+    // 同タイミングで upsert（updated_at が同一秒に揃いやすい）
+    await addMember(db(), 'u_b', 'b', 'B');
+    await addMember(db(), 'u_a', 'a', 'A');
+    const sameTs = new Date().toISOString();
+    await db()
+      .prepare(
+        `INSERT INTO responses (occurrence_id, user_id, user_name, status, updated_at, post_deadline_change)
+         VALUES (?, 'u_b', 'b', '参加', ?, 0), (?, 'u_a', 'a', '参加', ?, 0)`,
+      )
+      .bind(occId, sameTs, occId, sameTs)
+      .run();
 
-    // 1 回目: u1, u2 に採番
-    const first = await assignNumbers(db(), occId);
-    const firstMap = new Map(first.all.map((a) => [a.user_id, a.number]));
-    expect(first.all.map((a) => a.number).sort((x, y) => x - y)).toEqual([1, 2]);
-
-    // 新規参加者 u3, u4 を追加して再実行
-    await setupParticipants(occId, ['u3', 'u4']);
-    const second = await assignNumbers(db(), occId);
-
-    // 新規採番は 2 名のみ
-    expect(second.assigned).toHaveLength(2);
-    expect(second.assigned.map((a) => a.user_id).sort()).toEqual(['u3', 'u4']);
-
-    // 既存（u1,u2）の番号は維持
-    const secondMap = new Map(second.all.map((a) => [a.user_id, a.number]));
-    expect(secondMap.get('u1')).toBe(firstMap.get('u1'));
-    expect(secondMap.get('u2')).toBe(firstMap.get('u2'));
-
-    // 全体で 1..4 の重複なし
-    const numbers = second.all.map((a) => a.number).sort((x, y) => x - y);
-    expect(numbers).toEqual([1, 2, 3, 4]);
-    expect(new Set(numbers).size).toBe(4);
+    const { all } = await assignNumbers(db(), occId, 'first-come');
+    expect(all.map((a) => a.user_id)).toEqual(['u_a', 'u_b']);
+    expect(all.map((a) => a.number)).toEqual([1, 2]);
   });
 
-  it('再実行で参加者が増えていなければ新規採番なし（冪等）', async () => {
+  it("mode='random': 1..N の重複なし番号で参加者全員に振る", async () => {
+    const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
+    const n = await insertNotification(GUILD, seg.id);
+    const occId = await insertOccurrence(n.id, '2025/01/04');
+    await setupParticipants(occId, ['u1', 'u2', 'u3', 'u4', 'u5']);
+
+    const { assigned, all } = await assignNumbers(db(), occId, 'random');
+    expect(assigned).toHaveLength(5);
+    expect(all.map((a) => a.number)).toEqual([1, 2, 3, 4, 5]);
+    expect(new Set(all.map((a) => a.user_id)).size).toBe(5);
+  });
+
+  it('再実行は既存番号を破棄して 1..N を振り直す（ADR 0018: 安定割り当て破棄）', async () => {
     const seg = await createSegment(db(), { guild_id: 'g1', name: 'キャスト', mention_role_id: null });
     const n = await insertNotification(GUILD, seg.id);
     const occId = await insertOccurrence(n.id, '2025/01/04');
     await setupParticipants(occId, ['u1', 'u2']);
 
-    await assignNumbers(db(), occId);
-    const second = await assignNumbers(db(), occId);
-    expect(second.assigned).toHaveLength(0);
-    expect(second.all).toHaveLength(2);
+    const first = await assignNumbers(db(), occId, 'first-come');
+    expect(first.all.map((a) => a.number)).toEqual([1, 2]);
 
-    // getAssignments も number 昇順で一致
+    // 新規 u3 を追加し、u3 が先に回答した状態を作るため updated_at を上書き
+    await setupParticipants(occId, ['u3']);
+    await new Promise((r) => setTimeout(r, 5));
+    await upsertResponse(db(), occId, 'u1', 'name_u1', '参加');
+    await upsertResponse(db(), occId, 'u2', 'name_u2', '参加');
+
+    const second = await assignNumbers(db(), occId, 'first-come');
+    // 全員振り直し: u3 (最古) → u1 → u2 の順
+    expect(second.all.map((a) => a.user_id)).toEqual(['u3', 'u1', 'u2']);
+    expect(second.all.map((a) => a.number)).toEqual([1, 2, 3]);
+    // assignments テーブルにも 3 行のみ（重複なし）
     const list = await getAssignments(db(), occId);
-    expect(list.map((a) => a.number)).toEqual([1, 2]);
+    expect(list.map((a) => a.number)).toEqual([1, 2, 3]);
   });
 
   it('不参加・未定は採番対象外', async () => {
@@ -283,7 +302,7 @@ describe('assignNumbers（安定割り当て）', () => {
     await upsertResponse(db(), occId, 'u2', 'n2', '不参加');
     await upsertResponse(db(), occId, 'u3', 'n3', '未定');
 
-    const { all } = await assignNumbers(db(), occId);
+    const { all } = await assignNumbers(db(), occId, 'first-come');
     expect(all.map((a) => a.user_id)).toEqual(['u1']);
     expect(all[0].number).toBe(1);
   });
