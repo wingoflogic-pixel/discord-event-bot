@@ -6,6 +6,16 @@ Cloudflare Workers + D1 で稼働する Discord イベント出欠/勤怠Bot（`
 
 旧Vercel + Google Sheets 版（`api/`・`lib/`・`vercel.json`）からの本番カットオーバーは 2026-06-19 に完了し、旧版はリポジトリから撤去済み（必要時は git 履歴で参照可）。
 
+## npm 操作の必須コマンド
+
+`package.json` / `package-lock.json` を触る前に **必ず npm 10** で操作する（`packageManager: "npm@10.9.2"` で固定済み）。npm 11 は `@emnapi/*` のような optional transitive ピン留めを lock から prune し、②staging Workers Builds (`npm ci`) を破壊する（2026-06-28 に事故発生）。
+
+- **初回 clone 後 / Node を上げた直後は 1 回 `corepack enable` を実行**。corepack が package.json の `packageManager` を読み、`npm -v` が 10.9.2 になる
+- 依存追加/削除/更新: `npm install <pkg>` / `npm uninstall <pkg>`（corepack 経由で自動的に npm 10）
+- 復旧・CI 再現: `npm ci`（素の `npm install` を打たない）
+- 操作後は `git diff package-lock.json` で `@emnapi/*` の version / integrity 変動が無いか確認
+- `package.json` と `package-lock.json` は**同じ commit に含める**（両方一緒に push）
+
 ## 本番 Choiemu チャンネルへの操作
 
 本番 Choiemu サーバー／チャンネルに影響が及びうる操作は、実行前に必ずユーザーへ明示的に許可を取ること。
