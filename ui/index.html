@@ -691,10 +691,11 @@
           const d = document.createElement('dialog');
           d.className = 'modal';
           d.setAttribute('aria-label', '確認');
+          // ponytail: (b) cancelLabel を受け付け、confirmDiscardNotif を吸収。
           d.innerHTML = `<h3>${esc(opts.title || '確認')}</h3>
             <p>${esc(message)}</p>
             <div class="actions">
-              <button class="btn ghost" data-cancel>キャンセル</button>
+              <button class="btn ghost" data-cancel>${esc(opts.cancelLabel || 'キャンセル')}</button>
               <button class="btn ${opts.danger ? 'danger' : ''}" data-ok>${esc(opts.okLabel || 'OK')}</button>
             </div>`;
           document.body.appendChild(d);
@@ -1493,31 +1494,15 @@
         const first = $('#nName'); if (first) first.focus();
       }
       async function attemptCloseNotif() {
-        if (formDirty && !(await confirmDiscardNotif())) return;
+        if (formDirty && !(await confirmDialog('保存していない変更は失われます。', {
+          title: '編集中の内容を破棄しますか？',
+          okLabel: '破棄して閉じる',
+          cancelLabel: '編集に戻る',
+          danger: true,
+        }))) return;
         formDirty = false;
         closeAsPage($('#nDialog'));
         navigate(''); // 親（一覧）へ
-      }
-      // フォームモーダルは top-layer のため、確認も <dialog>（div の confirmDialog は下に隠れる）。
-      function confirmDiscardNotif() {
-        return new Promise((resolve) => {
-          const d = document.createElement('dialog');
-          d.className = 'modal';
-          d.innerHTML = `<h3>編集中の内容を破棄しますか？</h3>
-            <p>保存していない変更は失われます。</p>
-            <div class="actions">
-              <button class="btn ghost" data-cancel>編集に戻る</button>
-              <button class="btn danger" data-ok>破棄して閉じる</button>
-            </div>`;
-          document.body.appendChild(d);
-          const done = (v) => { d.close(); d.remove(); resolve(v); };
-          d.querySelector('[data-cancel]').onclick = () => done(false);
-          d.querySelector('[data-ok]').onclick = () => done(true);
-          d.addEventListener('cancel', (e) => { e.preventDefault(); done(false); });
-          d.addEventListener('click', (e) => { if (e.target === d) done(false); }); // 背景クリック=編集に戻る（既存 confirmDialog 規約に合わせる）
-          d.showModal();
-          d.querySelector('[data-ok]').focus();
-        });
       }
       function resetNotifForm() {
         $('#nId').value = ''; $('#nFormTitle').textContent = '新規通知';
