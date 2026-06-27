@@ -283,13 +283,13 @@ main { padding: 22px; max-width: 940px; }
   justify-content: center; z-index: 80; padding: 20px; animation: fade .15s ease;
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-.modal { background: var(--elevated); border: 1px solid var(--border2); border-radius: var(--r-lg); box-shadow: var(--shadow); max-width: 420px; width: 100%; padding: 20px; }
+.modal { background: var(--elevated); color: var(--text); border: 1px solid var(--border2); border-radius: var(--r-lg); box-shadow: var(--shadow); max-width: 420px; width: 100%; padding: 20px; }
 .modal h3 { margin: 0 0 8px; }
 .modal p { margin: 0 0 16px; color: var(--text); }
 .modal .actions { justify-content: flex-end; }
 
 /* ネイティブ <dialog> を使う小さな確認（破棄ガード等）。div 版 .modal と衝突しないよう dialog セレクタで限定 */
-dialog.modal { margin: auto; }
+dialog.modal { margin: auto; color-scheme: dark; }
 dialog.modal::backdrop { background: var(--backdrop); animation: fade .15s ease; }
 
 /* 大きいフォーム用モーダル（ネイティブ <dialog>）。Discord のフローティング面に倣い、
