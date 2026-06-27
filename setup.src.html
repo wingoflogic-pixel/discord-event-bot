@@ -173,9 +173,11 @@
       font-size: 1.02rem; margin: 24px 0 6px; color: var(--ink);
       display: flex; align-items: center; gap: 9px; line-height: 1.4;
     }
+    /* サブステップ番号: 親ステップの〇（丸）と描き分けるため □（角丸の四角）。
+       中身は素の数字（丸囲みグリフを入れると「丸の中に丸」になり重複するため）。 */
     h3.substep .n {
-      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
-      background: var(--accent); color: #fff; font-size: .82rem; font-weight: 700;
+      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px;
+      background: var(--accent); color: #fff; font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums;
       display: grid; place-items: center;
     }
     h3.substep:first-child { margin-top: 6px; }
@@ -232,7 +234,7 @@
           </a>
         </div>
 
-        <h3 class="substep"><span class="n">①</span>アプリを新規作成する</h3>
+        <h3 class="substep"><span class="n">1</span>アプリを新規作成する</h3>
         <p><span class="where">画面の右上<span class="arr">▸</span>青い「新しいアプリケーション」ボタン</span>を押します。出てきた「アプリを新規作成する」の窓で <b>名前</b>（例: <b>イベント出欠Bot</b>）を入れ、規約のチェックを入れて <b>「作成」</b> を押します。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -255,7 +257,7 @@
           <figcaption>①名前を入れ、②<b>左のチェックボックス（規約同意）</b>にチェック → ③<b>「作成」</b>（赤枠）。</figcaption>
         </figure>
 
-        <h3 class="substep"><span class="n">②</span>「アプリID」と「公開キー」をコピーする</h3>
+        <h3 class="substep"><span class="n">2</span>「アプリID」と「公開キー」をコピーする</h3>
         <p><span class="where">左メニュー<span class="arr">▸</span>概要<span class="arr">▸</span>一般情報</span>を開き、少し下にスクロールします。<b>「アプリID」</b>と<b>「公開キー」</b>それぞれの<b>「コピー」</b>ボタンを押し、下の入力欄に貼り付けてください。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -279,7 +281,7 @@
           <input type="text" id="publicKey" autocomplete="off" spellcheck="false" placeholder="例: a1b2c3... （64文字）" />
         </div>
 
-        <h3 class="substep"><span class="n">③</span>Bot のトークンを取得し、メンバー取得を ON にする</h3>
+        <h3 class="substep"><span class="n">3</span>Bot のトークンを取得し、メンバー取得を ON にする</h3>
         <p><span class="where">左メニュー<span class="arr">▸</span>Bot</span>を開き、<b>「トークン」</b>の<b>「トークンをリセット」</b>（青ボタン）を押すと、新しいトークンが表示されます。<b>コピー</b>して下の欄に貼り付けてください（トークンは表示が一度きりです）。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -305,7 +307,7 @@
           <button class="btn-copy" type="button" id="toggleBot">表示</button>
         </div>
 
-        <h3 class="substep"><span class="n">④</span>「インストールリンク」を「なし」にする</h3>
+        <h3 class="substep"><span class="n">4</span>「インストールリンク」を「なし」にする</h3>
         <p><span class="where">左メニュー<span class="arr">▸</span>概要<span class="arr">▸</span>インストール</span>を開き、<b>「インストールリンク」</b>のドロップダウンを<b>「なし」</b>に変更します（自分専用の Bot にするため）。これをやらないと、あとで <span class="pill">Private application cannot have a default authorization link</span> というエラーになります。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -375,7 +377,7 @@
           </a>
         </div>
 
-        <h3 class="substep"><span class="n">①</span>リポジトリを fork する</h3>
+        <h3 class="substep"><span class="n">1</span>リポジトリを fork する</h3>
         <p>上の<b>「リポジトリを fork する」</b>を開き、GitHub にログイン。<span class="where">「Owner」<span class="arr">▸</span>あなたのアカウント</span>を選び、<span class="where">右下の緑「Create fork」</span>を押します。あなたの GitHub にコピー（fork）ができます。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -388,7 +390,7 @@
           <figcaption><b>「Owner」</b>であなたのアカウントを選び、右下の緑<b>「Create fork」</b>（赤枠）。</figcaption>
         </figure>
 
-        <h3 class="substep"><span class="n">②</span>Cloudflare に接続する</h3>
+        <h3 class="substep"><span class="n">2</span>Cloudflare に接続する</h3>
         <p>上の<b>「Cloudflare ダッシュボードを開く」</b>を押すと、<b>「Workers &amp; Pages」</b>の画面が開きます。<span class="where">右上の青「Create application」</span>を押します。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -417,11 +419,11 @@
           <figcaption>一覧の<b>「discord-event-bot」</b>（赤枠）を選択 →「Next」。下の項目は他のリポジトリなので隠しています。</figcaption>
         </figure>
 
-        <h3 class="substep"><span class="n">③</span>Deploy command を「npm run deploy」に変える</h3>
+        <h3 class="substep"><span class="n">3</span>Deploy command を「npm run deploy」に変える</h3>
         <p>次の<b>「Set up your application」</b>画面で、<span class="where">「Deploy command」の欄</span>を、最初に入っている <span class="pill">npx wrangler deploy</span> から下の値に<b>書き換えます</b>（ここを変えないと、更新時にデータベースの更新が走りません）。</p>
         <div class="copybox"><span class="cap">Deploy command</span><code id="v_deploycmd">npm run deploy</code><button class="btn-copy" type="button" data-copy="v_deploycmd">コピー</button></div>
 
-        <h3 class="substep"><span class="n">④</span>デプロイする</h3>
+        <h3 class="substep"><span class="n">4</span>デプロイする</h3>
         <p>同じ画面の右下、青い<b>「Deploy」</b>を押します。<b>データベース（D1）は自動で作られ、表も自動で用意</b>されます。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -434,7 +436,7 @@
           <figcaption><b>③</b>「Deploy command」を <span class="pill">npm run deploy</span> に書き換え → <b>④</b> 右下の青<b>「Deploy」</b>（赤枠）。</figcaption>
         </figure>
 
-        <h3 class="substep"><span class="n">⑤</span>4つの合言葉（シークレット）を設定する</h3>
+        <h3 class="substep"><span class="n">5</span>4つの合言葉（シークレット）を設定する</h3>
         <p>作成された Worker の <span class="where">Settings<span class="arr">▸</span>Variables and secrets</span> を開き、<b>「+ Add」</b>から下の4つを<b>1つずつ追加</b>します。手順1の3つ＋手順2のパスワードです。</p>
         <div class="copybox"><span class="cap">DISCORD_PUBLIC_KEY</span><code id="v_pk">（手順1で入力）</code><button class="btn-copy" type="button" data-copyval="publicKey">コピー</button></div>
         <div class="copybox"><span class="cap">DISCORD_APPLICATION_ID</span><code id="v_app">（手順1で入力）</code><button class="btn-copy" type="button" data-copyval="appId">コピー</button></div>
@@ -449,7 +451,7 @@
           <figcaption>Worker の <b>Settings → Variables and secrets</b>。<b>「+ Add」</b>（赤枠）から1つずつ。名前は上の4つと完全に同じに。値は <b>Value encrypted</b> と表示されればOK。（画面では名前のアルファベット順に並びます／追加する順番は問いません。）</figcaption>
         </figure>
 
-        <h3 class="substep"><span class="n">⑥</span>Bot の URL を控える</h3>
+        <h3 class="substep"><span class="n">6</span>Bot の URL を控える</h3>
         <p>Worker の <span class="where">Overview（概要）</span>画面の上に出る <b>https://◯◯◯.workers.dev</b> が、あなたの Bot の URL です。下の欄に貼り付けてください。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -551,7 +553,7 @@
       <div class="body">
         <p>ここからは管理画面の左メニューで設定します。順番は <b>「メンバー区分」→「通知」</b> です。</p>
 
-        <h3 class="substep"><span class="n">①</span>メンバー区分をつくる</h3>
+        <h3 class="substep"><span class="n">1</span>メンバー区分をつくる</h3>
         <p><span class="where">左メニュー<span class="arr">▸</span>👥 メンバー区分</span>を開き、「新規区分」で対象グループを作成（例: キャスト、スタッフ）。@メンションする Discord ロールは任意で紐付け。<b>「名前」</b>を入れて<b>「保存」</b>。メンバーは各区分の<b>「メンバー」</b>ボタンから一覧で選ぶだけです。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -562,7 +564,7 @@
           <figcaption>区分の<b>「メンバー」</b>（赤枠）で一覧から追加。下の「新規区分」で<b>「名前」</b>を入れ<b>「保存」</b>。</figcaption>
         </figure>
 
-        <h3 class="substep"><span class="n">②</span>通知（募集）をつくる</h3>
+        <h3 class="substep"><span class="n">2</span>通知（募集）をつくる</h3>
         <p><span class="where">左メニュー<span class="arr">▸</span>🔔 通知</span>を開き、<b>対象区分（メンバー区分）・投稿チャンネル・種別（繰り返し/単発）・開始時刻・曜日</b>などを設定して保存。設定どおりに募集とリマインドが自動で送られます。</p>
         <figure class="shot">
           <div class="shot-frame">
@@ -592,11 +594,11 @@
         <p><b>ADMIN_TOKEN（管理画面のパスワード）は、安全のため「あとから中身を見て確認する」ことができません。</b>でも心配いりません。忘れてしまったら、<b>新しいパスワードに作り直す</b>だけで、また管理画面に入れます。</p>
         <div class="step-tip">😌 <b>データは消えません</b>：作り直しても、登録済みのメンバー・回答・通知などはそのまま残ります。変わるのは「ログインの合言葉」だけです。</div>
 
-        <h3 class="substep"><span class="n">①</span>新しいパスワードを用意する</h3>
+        <h3 class="substep"><span class="n">1</span>新しいパスワードを用意する</h3>
         <p>このページの上の方にある<b>「手順2：管理パスワード（ADMIN_TOKEN）を作る」</b>を開き、<b>「🎲 パスワードを生成する」</b>を押すと、新しい合言葉を作れます。表示された文字列を<b>コピー</b>し、安全な場所（パスワード管理アプリなど）に控えてください。</p>
         <div class="step-tip">💡 自分で考えた長い文字列でも構いませんが、推測されにくいよう<b>英数字で30文字以上</b>を目安にしてください。</div>
 
-        <h3 class="substep"><span class="n">②</span>Cloudflare で古いパスワードを差し替える</h3>
+        <h3 class="substep"><span class="n">2</span>Cloudflare で古いパスワードを差し替える</h3>
         <p>手順3で使った Cloudflare の画面を開き、<span class="where">あなたの Worker<span class="arr">▸</span>Settings<span class="arr">▸</span>Variables and secrets</span> を開きます。一覧の中の <span class="pill">ADMIN_TOKEN</span> の行で、次の<b>どちらか</b>を行います。</p>
         <ol>
           <li>行の右の<b>「Edit」（編集）</b>を押し、①で作った新しい値に<b>書き換えて保存</b>する。</li>
@@ -605,7 +607,7 @@
         <div class="copybox"><span class="cap">設定する名前（コピーして貼り付け）</span><code id="v_admname">ADMIN_TOKEN</code><button class="btn-copy" type="button" data-copy="v_admname">コピー</button></div>
         <div class="step-tip">⏱️ 保存すると<b>数秒で反映</b>されます。名前は <span class="pill">ADMIN_TOKEN</span> と<b>1文字も違わない</b>ようにしてください（前後に空白を入れない・大文字小文字もそのまま）。値が <b>Value encrypted</b> と表示されればOKです。</div>
 
-        <h3 class="substep"><span class="n">③</span>新しいパスワードでログインする</h3>
+        <h3 class="substep"><span class="n">3</span>新しいパスワードでログインする</h3>
         <p>管理画面をもう一度開き、①で作った<b>新しいパスワード</b>を入力してログインします。これで完了です。</p>
         <div class="step-tip">🔒 <b>安全のヒント</b>：古いパスワードは差し替えと同時に使えなくなります。「誰かに知られたかも」というときも、この手順で作り直せば安心です。</div>
         <div class="step-tip">💡 <b>（パソコンに詳しい方向け）すぐ確認したいとき</b>：管理画面に<b>まだログインしたままのブラウザ</b>があれば、そこに今のパスワードが残っています。そのブラウザで <kbd>F12</kbd> →「Application（アプリケーション）」→「Local Storage」→ あなたの Bot の URL を選ぶと、<span class="pill">eventbot_admin_token</span> の値が現在の ADMIN_TOKEN です。</div>
