@@ -12,6 +12,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["design-system/serve-ui.mjs"],
       "port": 5578
+    },
+    {
+      "name": "setup-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/serve-setup.mjs"],
+      "port": 5582
     }
   ]
 }

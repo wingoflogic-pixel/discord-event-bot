@@ -5,27 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>セットアップ・アシスタント — discord-event-bot</title>
   <style>
+    /* EventBot Design System（Midnight ダーク）準拠。design-system/styles/tokens.css と同値。
+       配布物は自己完結HTML（外部依存なし）のため、@import せず DS トークンをここへ転記する。
+       管理UIと同一の暗色テーマで統一（dark-only）。 */
     :root {
-      --accent: #5865f2;
-      --accent-d: #4451d6;
-      --ok: #18794e;
-      --ok-bg: #e8f5ee;
-      --bg: #f5f6fa;
-      --card: #ffffff;
-      --ink: #1f2430;
-      --muted: #5a6275;
-      --line: #e2e5ee;
-      --warn-bg: #fff7e6;
-      --warn-line: #ffd27a;
-      --radius: 14px;
-      --shadow: 0 1px 3px rgba(20, 24, 40, .06), 0 8px 24px rgba(20, 24, 40, .06);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #14161c; --card: #1d2029; --ink: #eef0f6; --muted: #a3aabb;
-        --line: #2c3140; --ok-bg: #15302440; --warn-bg: #332a12; --warn-line: #6b551f;
-        --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
-      }
+      --accent: #5865f2;          /* DS --accent (Discord blurple) */
+      --accent-d: #4752c4;        /* DS --accent-hover */
+      --ok: #23a559;              /* DS --ok */
+      --ok-text: #2dc770;         /* DS --pill-ok-text（暗背景での緑文字） */
+      --ok-bg: color-mix(in srgb, var(--ok) 16%, transparent);
+      --bg: #0c0d0f;              /* DS --bg（最暗・ページ） */
+      --panel: #141518;           /* DS --panel（入力など沈み面） */
+      --card: #1c1d20;            /* DS --elevated（カード/浮き面） */
+      --ink: #dbdee1;             /* DS --text */
+      --muted: #b5bac1;           /* DS --muted */
+      --line: #3f4147;            /* DS --border */
+      --line2: #484b52;           /* DS --border2 */
+      --danger: #f23f43;          /* DS --danger */
+      --warn: #f0b232;            /* DS --warn */
+      --warn-bg: color-mix(in srgb, var(--warn) 12%, var(--bg));
+      --warn-line: color-mix(in srgb, var(--warn) 45%, transparent);
+      --radius: 12px;             /* DS --r-lg */
+      --shadow: 0 8px 16px rgba(0, 0, 0, .24);  /* DS --shadow */
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -35,19 +36,19 @@
       line-height: 1.75; font-size: 16px;
     }
     header.top {
-      background: linear-gradient(135deg, var(--accent), #7b86ff);
-      color: #fff; padding: 22px 20px 18px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-d));
+      color: #fff; padding: 10px 20px 11px;
       position: sticky; top: 0; z-index: 20;
-      box-shadow: 0 4px 16px rgba(20, 24, 40, .18);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
     }
     .wrap { max-width: 760px; margin: 0 auto; padding: 0 18px; }
     header.top .wrap { padding: 0 18px; }
-    h1 { margin: 0 0 6px; font-size: 1.5rem; letter-spacing: .01em; }
-    header.top p { margin: 0; opacity: .94; font-size: .96rem; }
-    .progress { margin: 16px auto 0; max-width: 760px; }
-    .bar { height: 10px; background: rgba(255,255,255,.28); border-radius: 99px; overflow: hidden; }
+    h1 { margin: 0 0 2px; font-size: 1.18rem; letter-spacing: .01em; }
+    header.top p { margin: 0; font-size: .8rem; line-height: 1.4; }
+    .progress { margin: 8px auto 0; max-width: 760px; }
+    .bar { height: 7px; background: rgba(255,255,255,.28); border-radius: 99px; overflow: hidden; }
     .bar > i { display: block; height: 100%; width: 0; background: #fff; border-radius: 99px; transition: width .35s ease; }
-    .bar-label { font-size: .82rem; margin-top: 6px; opacity: .95; }
+    .bar-label { font-size: .78rem; margin-top: 4px; }
 
     main { padding: 22px 0 60px; }
     .note {
@@ -60,7 +61,7 @@
       background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
       box-shadow: var(--shadow); margin: 0 0 16px; overflow: hidden;
     }
-    .step.done { border-color: #bfe3cd; }
+    .step.done { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
     .step > summary {
       list-style: none; cursor: pointer; padding: 16px 18px;
       display: flex; align-items: center; gap: 12px; user-select: none;
@@ -89,12 +90,12 @@
     label.fld .hint { font-weight: 400; color: var(--muted); font-size: .82rem; }
     .row { display: flex; gap: 8px; align-items: stretch; }
     input[type=text], input[type=password] {
-      flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--line);
-      border-radius: 10px; background: var(--bg); color: var(--ink); font-size: .95rem;
+      flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--line2);
+      border-radius: 8px; background: var(--panel); color: var(--ink); color-scheme: dark; font-size: .95rem;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
     input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-    .valid { border-color: #bfe3cd !important; }
+    .valid { border-color: color-mix(in srgb, var(--ok) 55%, transparent) !important; }
 
     button {
       font: inherit; cursor: pointer; border: none; border-radius: 10px;
@@ -103,11 +104,11 @@
     button:active { transform: translateY(1px); }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: var(--accent-d); }
-    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+    .btn-ghost { background: transparent; color: color-mix(in srgb, var(--accent) 58%, #fff); border: 1px solid var(--line2); }
     .btn-ghost:hover { border-color: var(--accent); }
-    .btn-copy { flex: 0 0 auto; background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+    .btn-copy { flex: 0 0 auto; background: var(--card); color: var(--ink); border: 1px solid var(--line2); }
     .btn-copy:hover { border-color: var(--accent); }
-    .btn-copy.copied { background: var(--ok-bg); color: var(--ok); border-color: #bfe3cd; }
+    .btn-copy.copied { background: var(--ok-bg); color: var(--ok-text); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: center; }
     a.linkbtn { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 
@@ -126,14 +127,14 @@
     .done-toggle { margin-top: 18px; display: flex; align-items: center; gap: 9px; font-weight: 600; }
     .done-toggle input { width: 19px; height: 19px; accent-color: var(--ok); }
 
-    .secret-warn { color: #b54708; font-weight: 600; }
+    .secret-warn { color: var(--warn); font-weight: 600; }
     .step-tip { background: var(--bg); border-radius: 10px; padding: 10px 12px; font-size: .9rem; color: var(--muted); margin-top: 12px; }
     footer { max-width: 760px; margin: 0 auto; padding: 8px 18px 50px; color: var(--muted); font-size: .86rem; }
     footer .actions { justify-content: space-between; }
-    .danger { color: #b42318; background: transparent; border: 1px solid var(--line); }
-    .danger:hover { border-color: #b42318; }
-    .ok-text { color: var(--ok); font-weight: 600; }
-    .err-text { color: #b42318; font-weight: 600; font-size: .85rem; }
+    .danger { color: var(--danger); background: transparent; border: 1px solid var(--line); }
+    .danger:hover { border-color: var(--danger); }
+    .ok-text { color: var(--ok-text); font-weight: 600; }
+    .err-text { color: color-mix(in srgb, var(--danger) 72%, #fff); font-weight: 600; font-size: .85rem; }
     kbd { background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 1px 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85em; }
 
     /* --- 画面キャプチャ図版（実画面に矢印/枠/目隠しを重ねる） --- */
@@ -141,27 +142,30 @@
     .shot-frame {
       position: relative; line-height: 0;
       border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
-      background: var(--bg); box-shadow: 0 1px 2px rgba(20, 24, 40, .08);
+      background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
     }
     .shot-frame > img { width: 100%; height: auto; display: block; }
     .cal { position: absolute; box-sizing: border-box; pointer-events: none; }
-    .cal.ring { border: 3px solid #ff3b30; border-radius: 9px; box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 10px rgba(255, 59, 48, .35); }
+    /* 画面注釈の赤インク（埋め込みスクショ上に重ねる「ここを押す」枠/ラベル）。
+       多様な背景でも目立つ DS の --danger で統一しつつ、白ハローで視認性を確保。 */
+    .cal.ring { border: 3px solid var(--danger); border-radius: 9px; box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
     .cal.tag {
-      background: #ff3b30; color: #fff; font-size: .78rem; line-height: 1.5; font-weight: 700;
+      background: var(--danger); color: #fff; font-size: .78rem; line-height: 1.5; font-weight: 700;
       padding: 1px 7px; border-radius: 7px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
       transform: translateY(-115%);
     }
     .cal.tag.below { transform: translateY(15%); }
     .cal.redact {
       display: flex; align-items: center; justify-content: center; text-align: center;
-      color: #eef0f6; font-size: .72rem; line-height: 1.15; font-weight: 600; letter-spacing: .02em; padding: 0 4px;
+      background: rgba(0, 0, 0, .45); color: #eef0f6; font-size: .72rem; line-height: 1.15; font-weight: 600; letter-spacing: .02em; padding: 0 4px;
     }
     figure.shot figcaption {
       line-height: 1.55; color: var(--muted); font-size: .82rem; margin-top: 7px; padding-left: 2px;
     }
-    figure.shot figcaption b { color: #c0392b; }
+    figure.shot figcaption b { color: var(--danger); }
     .where {
-      display: inline-block; background: var(--ok-bg); color: var(--ok); border: 1px solid #bfe3cd;
+      display: inline-block; background: var(--ok-bg); color: var(--ok-text); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
       border-radius: 7px; padding: 0 8px; font-size: .92em; font-weight: 600;
     }
     .where .arr { opacity: .55; margin: 0 2px; font-weight: 400; }
@@ -182,7 +186,6 @@
     <div class="wrap">
       <h1>🛠️ セットアップ・アシスタント</h1>
       <p>discord-event-bot を動かすための初期設定を、画面の案内に沿って進めます。所要時間 15〜20 分・ターミナル操作は不要です。</p>
-      <p style="display:inline-block;background:#c0392b;color:#fff;font-weight:700;font-size:.82rem;padding:3px 10px;border-radius:6px;margin:6px 0 0">⚙ 校正ビルド @@BUILDID@@ — この時刻が今と大きく違う場合は再読込してください（Ctrl+Shift+R）</p>
       <div class="progress">
         <div class="bar"><i id="bar"></i></div>
         <div class="bar-label"><span id="doneCount">0</span> / <span id="totalCount">7</span> ステップ完了</div>
