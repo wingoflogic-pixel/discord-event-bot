@@ -11,11 +11,13 @@
        * Discord 2025 Q1 リフレッシュ準拠のモダンダークテーマ。
        * ============================================================= */
       :root {
-        /* --- 背景・面 (surfaces) --- */
-        --bg: #111214;
-        --panel: #1e1f22;
-        --panel2: #2b2d31;
-        --elevated: #313338;
+        /* --- 背景・面 (surfaces) ---
+         * Discord ダーク〜Midnight 寄りの近黒ランプ。中間グレー(#2b2d31/#313338)は不使用。
+         * 単調な明度順を保つ: bg(最暗・ページ/レール) < panel(沈み面/入力) < panel2(hover面) < elevated(カード/浮き面) */
+        --bg: #0c0d0f;
+        --panel: #141518;
+        --panel2: #18191c;
+        --elevated: #1c1d20;
       
         /* --- 境界線 (borders) --- */
         --border: #3f4147;
@@ -39,7 +41,7 @@
         --warn: #f0b232;
       
         /* --- ボタン hover (darken パターン) --- */
-        --btn-secondary-hover: #3a3c41;
+        --btn-secondary-hover: #26272b;
         --btn-danger-hover: #a12d31;
       
         /* --- コンポーネント固有テキスト --- */
@@ -347,40 +349,40 @@
         justify-content: center; z-index: 80; padding: 20px; animation: fade .15s ease;
       }
       @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-      .modal { background: var(--elevated); border: 1px solid var(--border2); border-radius: var(--r-lg); box-shadow: var(--shadow); max-width: 420px; width: 100%; padding: 20px; }
+      .modal { background: var(--elevated); color: var(--text); border: 1px solid var(--border2); border-radius: var(--r-lg); box-shadow: var(--shadow); max-width: 420px; width: 100%; padding: 20px; }
       .modal h3 { margin: 0 0 8px; }
       .modal p { margin: 0 0 16px; color: var(--text); }
       .modal .actions { justify-content: flex-end; }
       
       /* ネイティブ <dialog> を使う小さな確認（破棄ガード等）。div 版 .modal と衝突しないよう dialog セレクタで限定 */
-      dialog.modal { margin: auto; }
+      dialog.modal { margin: auto; color-scheme: dark; }
       dialog.modal::backdrop { background: var(--backdrop); animation: fade .15s ease; }
       
-      /* 大きいフォーム用モーダル（ネイティブ <dialog>）。背景は2トーンのみ:
-         サーフェス=--panel2（面・詳細セクション）／ リセス=--panel（入力欄・番号ノード）。Discord 設定ダイアログ準拠の沈んだ2トーン。
+      /* 大きいフォーム用モーダル（ネイティブ <dialog>）。Discord のフローティング面に倣い、
+         単一トーンの近黒サーフェス=--bg ＋ --border の細縁・強い影。入力欄/番号ノードは --panel で軽く浮かせる。
          ヘッダ/フッタ固定・ボディのみスクロール。 */
       dialog.modal-lg {
         width: min(820px, calc(100vw - 32px)); max-height: min(90vh, 940px);
         padding: 0; margin: auto; overflow: hidden;
-        background: var(--panel2); color: var(--text);
-        border: 1px solid var(--border2); border-radius: var(--r-lg); box-shadow: var(--shadow);
+        background: var(--bg); color: var(--text);
+        border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: 0 16px 50px rgba(0, 0, 0, .6);
       }
       dialog.modal-lg[open] { display: flex; flex-direction: column; }
       dialog.modal-lg::backdrop { background: var(--backdrop); animation: fade .15s ease; }
-      .modal-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 17px 24px; border-bottom: 1px solid var(--border); background: var(--panel2); }
+      .modal-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 17px 24px; border-bottom: 1px solid var(--border); background: var(--bg); }
       .modal-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
       .modal-close { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); border-radius: var(--r-sm); cursor: pointer; font-size: 16px; transition: background .15s ease, color .15s ease; }
       .modal-close:hover { background: rgba(255, 255, 255, .06); color: var(--text); }
       .modal-close:focus-visible { outline: none; box-shadow: var(--ring); }
       .modal-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 24px 18px; }
-      .modal-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); background: var(--panel2); }
+      .modal-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); background: var(--bg); }
       
       /* ダークモード用スクロールバー（フォームモーダル本体）。サーフェス色のボーダーで inset 表現 */
       .modal-body { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
       .modal-body::-webkit-scrollbar { width: 12px; }
       .modal-body::-webkit-scrollbar-track { background: transparent; }
-      .modal-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; border: 3px solid var(--panel2); background-clip: padding-box; }
-      .modal-body::-webkit-scrollbar-thumb:hover { background: var(--border-hover); border: 3px solid var(--panel2); background-clip: padding-box; }
+      .modal-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; border: 3px solid var(--bg); background-clip: padding-box; }
+      .modal-body::-webkit-scrollbar-thumb:hover { background: var(--border-hover); border: 3px solid var(--bg); background-clip: padding-box; }
       
       /* 2トーン徹底（ダイアログ内のみ上書き）: プレビュー=リセス、詳細セクションは面に溶かしフラット化 */
       dialog.modal-lg .summary { background: var(--panel); border: 1px solid var(--border); color: var(--text); }
@@ -400,7 +402,7 @@
         background: var(--panel); border: 1.5px solid var(--accent); color: var(--accent);
         display: inline-flex; align-items: center; justify-content: center;
         font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
-        box-shadow: 0 0 0 4px var(--panel2);
+        box-shadow: 0 0 0 4px var(--bg);
       }
       .tl-main { flex: 1 1 auto; min-width: 0; padding-top: 2px; }
       .tl-title { color: var(--text); font-weight: 600; font-size: 13.5px; }
@@ -455,8 +457,88 @@
         .ws-layout > .server-rail .server-rail-item::before { display: none; }
         .ws-layout > .server-rail .server-rail-divider { width: 2px; height: 32px; margin: 0 2px; }
       }
+      
+      /* ---- 子ページ（ADR 0016）: as-page な <dialog> を main 内に show() で表示し、
+             main.has-page でリスト(section)を隠してメインエリアを占有させる。 ---- */
+      main.has-page > section { display: none; }
+      dialog.modal-lg.as-page[open] {
+        position: static; inset: auto; display: flex; flex-direction: column;
+        width: 100%; max-width: none; height: auto; max-height: none;
+        margin: 0; border: none; border-radius: 0; box-shadow: none;
+        background: transparent; min-height: calc(100vh - 130px);
+      }
+      dialog.modal-lg.as-page .modal-head {
+        background: transparent; padding: 0 0 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      dialog.modal-lg.as-page .modal-body { padding: 16px 0; }
+      dialog.modal-lg.as-page .modal-foot {
+        background: transparent; padding: 14px 0 0; border-top: 1px solid var(--border);
+      }
+      /* パンくず＋戻る（ADR 0016・子ページ上端） */
+      .page-crumb { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+      .page-crumb a { color: var(--muted); text-decoration: none; }
+      .page-crumb a:hover { color: var(--text); text-decoration: underline; }
+      .page-back {
+        flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+        background: var(--panel); border: 1px solid var(--border2); border-radius: var(--r-sm);
+        color: var(--text); cursor: pointer; font-size: 13px; font-family: inherit;
+      }
+      .page-back:hover { background: var(--btn-secondary-hover); border-color: var(--border-hover); }
+      
+      /* ---- グループ分け（ADR 0015）: 開催回のメンバーをドラッグ&ドロップで班分けする盤面 ---- */
+      .grouping-toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+      .grouping-toolbar .spacer { flex:1; }
+      .grouping-board { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; }
+      .grouping-col {
+        background: var(--panel2); border:1px solid var(--border); border-radius: var(--r);
+        padding:10px; min-height:180px; display:flex; flex-direction:column;
+      }
+      .grouping-col.pool { background: var(--panel); border-style:dashed; }
+      .grouping-col-head { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
+      .grouping-col-head .name { font-weight:600; flex:1; padding:2px 4px; border-radius: var(--r-sm); cursor: text; }
+      .grouping-col-head .name:hover { background: var(--elevated); }
+      .grouping-col-head .name[contenteditable="true"]:focus { outline: var(--ring); background: var(--bg); }
+      .grouping-col-head .count { color: var(--muted); font-size:12px; }
+      .grouping-cards { flex:1; display:flex; flex-direction:column; gap:6px; min-height:80px; }
+      .grouping-card {
+        background: var(--elevated); border:1px solid var(--border); border-radius: var(--r-sm);
+        padding:6px 8px; cursor:grab; user-select:none; display:flex; gap:6px; align-items:center;
+        font-size:13px;
+      }
+      .grouping-card:active { cursor: grabbing; }
+      .grouping-card.violated-required { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+      .grouping-card.violated-preferred { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+      .grouping-card.no-longer { opacity:.55; text-decoration: line-through; }
+      .grouping-card .badge { font-size:10px; padding:1px 5px; border-radius:8px; }
+      .grouping-card .badge.new { background: var(--accent-soft); color: var(--accent); }
+      .grouping-card .badge.gone { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+      .sortable-ghost { opacity: 0.4; }
+      .sortable-chosen { outline: var(--ring); }
+      .grouping-alerts {
+        margin-top:12px; padding:10px; border-radius: var(--r); background: var(--panel2);
+        border-left: 3px solid var(--warn); max-height: 180px; overflow:auto;
+      }
+      .grouping-alerts.has-error { border-left-color: var(--danger); }
+      .grouping-alerts h4 { margin:0 0 6px; font-size:13px; }
+      .grouping-alerts ul { margin:0; padding-left: 18px; font-size:12px; }
+      .grouping-alerts .err { color: var(--danger); }
+      .grouping-alerts .warn { color: var(--warn); }
+      .grouping-constraints-panel {
+        margin-top:14px; padding:10px; border-radius: var(--r); background: var(--panel2);
+      }
+      .grouping-constraints-panel h4 { margin:0 0 8px; font-size:13px; }
+      .grouping-constraints-list { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+      .grouping-constraint-row {
+        display:flex; gap:6px; align-items:center; font-size:12px;
+        background: var(--panel); padding:6px 8px; border-radius: var(--r-sm);
+      }
+      .grouping-constraint-row .spacer { flex:1; }
+      .grouping-constraints-form { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+      .grouping-constraints-form select { min-width:120px; max-width:180px; padding:4px 6px; font-size:12px; }
     </style>
   <script src="/eventbot-tables.js"></script>
+  <script src="/eventbot-sortable.js"></script>
   </head>
   <body>
     <!-- トークンゲート -->
@@ -510,6 +592,49 @@
           <section id="sec-records" class="hidden"></section>
           <section id="sec-sendlog" class="hidden"></section>
           <section id="sec-setup" class="hidden"></section>
+
+          <!-- 子ページ（メインエリア差し替え・ADR 0016 決定#1）。main 直下に置き、
+               開いた dialog を show() で表示し main.has-page でリストを隠す。 -->
+          <dialog class="modal-lg as-page" id="occDialog" aria-labelledby="occTitle">
+            <div class="modal-head">
+              <div>
+                <div class="page-crumb"><a href="#" data-occ-close>通知</a> <span>›</span> <span id="occCrumb">番号割り当て/グループ分け</span></div>
+                <h3 id="occTitle">番号割り当て/グループ分け</h3>
+              </div>
+              <button type="button" class="page-back" data-occ-close aria-label="戻る">← 戻る</button>
+            </div>
+            <div class="modal-body" id="occBox"></div>
+            <div class="modal-foot"><button type="button" class="btn ghost" data-occ-close>閉じる</button></div>
+          </dialog>
+          <dialog class="modal-lg as-page" id="groupingDialog" aria-labelledby="groupingTitle">
+            <div class="modal-head">
+              <div>
+                <div class="page-crumb"><a href="#" id="groupingCrumbBack">番号割り当て/グループ分け</a> <span>›</span> <span>グループ分け</span></div>
+                <h3 id="groupingTitle">グループ分け</h3>
+              </div>
+              <button type="button" class="page-back" id="groupingClose" aria-label="戻る">← 戻る</button>
+            </div>
+            <div class="modal-body" id="groupingBox"></div>
+            <div class="modal-foot">
+              <span id="groupingErr" class="muted" style="color:var(--danger);margin-right:auto"></span>
+              <button type="button" class="btn ghost" id="groupingCancel">閉じる</button>
+              <button type="button" class="btn secondary" id="groupingAnnounce">📣 結果をチャンネルへ投稿</button>
+              <button type="button" class="btn" id="groupingSave">保存</button>
+            </div>
+          </dialog>
+          <dialog class="modal-lg as-page" id="segMembersDialog" aria-labelledby="segMembersTitle">
+            <div class="modal-head">
+              <div>
+                <div class="page-crumb"><a href="#" data-segm-close>メンバー区分</a> <span>›</span> <span>メンバー</span></div>
+                <h3 id="segMembersTitle">区分メンバー</h3>
+              </div>
+              <button type="button" class="page-back" data-segm-close aria-label="戻る">← 戻る</button>
+            </div>
+            <div class="modal-body" id="segMembersBox"></div>
+            <div class="modal-foot"><button type="button" class="btn ghost" data-segm-close>閉じる</button></div>
+          </dialog>
+          <!-- 通知フォーム（新規/編集）。notifForm() が動的に注入する。 -->
+          <div id="nFormHost"></div>
         </main>
       </div>
       </div>
@@ -660,9 +785,142 @@
       function selectGuild(g) {
         guild = g;
         localStorage.setItem(GUILD_KEY, JSON.stringify(g));
-        location.hash = g.id;
+        // ハッシュは `g/<guildId>` 形式（ADR 0016）。サーバー切替時は子ページパスをリセット。
+        // showWorkspace を先に呼び、workspace 起動後に hashchange が handleHashRoute を駆動する。
         showWorkspace();
+        location.hash = 'g/' + g.id;
       }
+
+      // ================= ハッシュルータ（ADR 0016）=================
+      // URL ハッシュ形式: #g/<guildId>/<resource>/<uuid?>/<sub?>
+      //   #g/<gid>                                    → 通知タブ（既存）
+      //   #g/<gid>/notifications/new                  → 通知 新規
+      //   #g/<gid>/notifications/<nuuid>/edit         → 通知 編集
+      //   #g/<gid>/notifications/<nuuid>/occurrences  → 開催回
+      //   #g/<gid>/segments/<suuid>/members           → 区分メンバー
+      //   #g/<gid>/notifications/<nuuid>/occurrences/<ouuid>/grouping → グループ分け
+      // モーダル DOM は維持し、URL ↔ open/close を双方向に同期する（リロード復帰可・ブラウザバック対応）。
+      function parseHash() {
+        const raw = (location.hash || '').replace(/^#/, '');
+        const parts = raw.split('/').filter(Boolean);
+        if (parts.length >= 2 && parts[0] === 'g') {
+          return { guildId: parts[1], rest: parts.slice(2) };
+        }
+        return { guildId: null, rest: [] };
+      }
+      /** 親パス（=ワークスペースのトップ）からの相対サブパスをハッシュへ反映 */
+      function navigate(subpath) {
+        if (!guild) return;
+        const base = 'g/' + guild.id;
+        const next = '#' + (subpath ? base + '/' + subpath : base);
+        // ハッシュ更新 → hashchange イベントが handleHashRoute を駆動する（単一経路）。
+        // 既に同じハッシュなら hashchange が発火しないので直接処理する。
+        if (location.hash === next) handleHashRoute();
+        else location.hash = next;
+      }
+      /** どのフォームに dirty があるか集約 */
+      function anyDirty() { return formDirty || groupingState.dirty; }
+      /** ワークスペースのメインエリア（ピッカー側 <main> と区別するため #workspace 配下に限定）。 */
+      function wsMain() { return document.querySelector('#workspace main'); }
+      /** as-page な <dialog> が一つでも開いていれば main.has-page を立て、リスト(section)を隠す。 */
+      function syncHasPage() {
+        const m = wsMain();
+        const open = !!(m && m.querySelector('dialog.as-page[open]'));
+        if (m) m.classList.toggle('has-page', open);
+      }
+      /** 子ページ <dialog> を非モーダル(show)で開き、メインエリアを占有する（背景暗転なし）。 */
+      function openAsPage(dlg) {
+        if (!dlg) return;
+        if (!dlg.open) dlg.show();
+        syncHasPage();
+        window.scrollTo(0, 0);
+      }
+      /** 子ページ <dialog> を閉じ、他に開いた子ページが無ければリストへ戻す。 */
+      function closeAsPage(dlg) {
+        if (dlg && dlg.open) dlg.close();
+        syncHasPage();
+      }
+      /** ハッシュ→画面状態を同期。子ページ部は <dialog>.show() のページ表示で表現する。 */
+      async function handleHashRoute() {
+        const { guildId, rest } = parseHash();
+        if (!guildId || !guild || guild.id !== guildId) return; // workspace 未起動 / 別サーバー切替は別経路
+        // 子ページパスからモーダル状態を決定
+        const want = (() => {
+          if (rest.length === 0) return { kind: 'list' };
+          if (rest[0] === 'notifications') {
+            if (rest[1] === 'new') return { kind: 'notif-new' };
+            if (rest[2] === 'edit') return { kind: 'notif-edit', nuuid: rest[1] };
+            if (rest[2] === 'occurrences') {
+              if (rest[4] === 'grouping') return { kind: 'grouping', nuuid: rest[1], ouuid: rest[3] };
+              return { kind: 'occurrences', nuuid: rest[1] };
+            }
+          }
+          if (rest[0] === 'segments' && rest[2] === 'members') return { kind: 'seg-members', suuid: rest[1] };
+          return { kind: 'list' };
+        })();
+        // 通知タブが選ばれていない場合は切替（区分メンバー以外）
+        if (want.kind === 'seg-members') {
+          if (document.querySelector('.side .navitem.active')?.dataset.sec !== 'segments') switchSection('segments');
+        } else if (want.kind !== 'list') {
+          if (document.querySelector('.side .navitem.active')?.dataset.sec !== 'notifications') switchSection('notifications');
+        }
+        // 開かない方向に動いた子ページは閉じる（has-page も同期）
+        const closeIfOpen = (sel) => { const d = $(sel); if (d && d.open) d.close(); syncHasPage(); };
+        switch (want.kind) {
+          case 'list':
+            // すべてのフォーム系モーダルを閉じる（dirty 確認は close 系ヘルパ側に集約）
+            await tryCloseModal('nDialog', attemptCloseNotif);
+            closeIfOpen('#occDialog');
+            await tryCloseModal('groupingDialog', attemptCloseGrouping);
+            closeIfOpen('#segMembersDialog');
+            return;
+          case 'notif-new':
+            closeIfOpen('#occDialog'); closeIfOpen('#groupingDialog'); closeIfOpen('#segMembersDialog');
+            if (!$('#nDialog')?.open) openNotifModal(null);
+            return;
+          case 'notif-edit': {
+            closeIfOpen('#occDialog'); closeIfOpen('#groupingDialog'); closeIfOpen('#segMembersDialog');
+            const n = cacheNotifs.find((x) => x.uuid === want.nuuid);
+            if (n) { if (!$('#nDialog')?.open) openNotifModal(n); }
+            else { try {
+              const fetched = await api('/notifications/' + want.nuuid);
+              if (fetched) openNotifModal(fetched);
+            } catch (_) { toast('通知が見つかりません', true); navigate(''); } }
+            return;
+          }
+          case 'occurrences':
+            closeIfOpen('#nDialog'); closeIfOpen('#groupingDialog'); closeIfOpen('#segMembersDialog');
+            loadOccurrences(want.nuuid);
+            return;
+          case 'grouping':
+            closeIfOpen('#nDialog'); closeIfOpen('#occDialog'); closeIfOpen('#segMembersDialog');
+            openGroupingDialog(want.ouuid, want.nuuid);
+            return;
+          case 'seg-members':
+            closeIfOpen('#nDialog'); closeIfOpen('#occDialog'); closeIfOpen('#groupingDialog');
+            loadSegmentMembers(want.suuid);
+            return;
+        }
+      }
+      async function tryCloseModal(id, closer) {
+        const d = $('#' + id); if (!d || !d.open) return;
+        await closer();
+      }
+      /** 開催回ページを閉じて一覧へ */
+      function closeOccurrencesPage() {
+        closeAsPage($('#occDialog'));
+        navigate('');
+      }
+      /** 区分メンバーページを閉じて一覧へ */
+      function closeSegMembersPage() {
+        closeAsPage($('#segMembersDialog'));
+        navigate('');
+      }
+      // ブラウザ操作: hashchange とリロード
+      window.addEventListener('hashchange', () => { handleHashRoute(); });
+      window.addEventListener('beforeunload', (e) => {
+        if (anyDirty()) { e.preventDefault(); e.returnValue = ''; }
+      });
 
       // ================= ナビ =================
       const SECTIONS = ['notifications', 'segments', 'records', 'sendlog', 'setup'];
@@ -672,7 +930,25 @@
         SECTIONS.forEach((s) => $('#sec-' + s).classList.toggle('hidden', s !== sec));
         LOADERS[sec]();
       }
-      document.querySelectorAll('.side .navitem').forEach((n) => { n.onclick = () => switchSection(n.dataset.sec); });
+      /** 開いている子ページ(<dialog>.as-page)をすべて閉じ、メインエリアを一覧へ戻す。 */
+      function closePagesNow() {
+        teardownSortables();
+        const m = wsMain();
+        if (m) m.querySelectorAll('dialog.as-page[open]').forEach((d) => { try { d.close(); } catch (_) {} });
+        syncHasPage();
+      }
+      // サイドナビ: 子ページを開いていたら離脱ガードののち閉じ、一覧タブへ切替＋URL を base に同期。
+      document.querySelectorAll('.side .navitem').forEach((n) => {
+        n.onclick = async () => {
+          if (anyDirty()) {
+            if (!(await confirmDialog('未保存の変更があります。移動してもよろしいですか？', { okLabel: '移動する', danger: true }))) return;
+          }
+          formDirty = false; groupingState.dirty = false;
+          closePagesNow();
+          switchSection(n.dataset.sec);
+          if (guild) { const base = '#g/' + guild.id; if (location.hash !== base) location.hash = base; }
+        };
+      });
 
       // ================= 繰り返し（RRULE は隠す） =================
       const WEEKDAYS = [['SU', '日'], ['MO', '月'], ['TU', '火'], ['WE', '水'], ['TH', '木'], ['FR', '金'], ['SA', '土']];
@@ -877,13 +1153,15 @@
       let cacheChannels = [], cacheSegments = [], cacheNotifs = [];
       function estimateBanner(est) {
         const over = est.overDaily || est.overWindow;
-        return `<div class="alert ${over ? 'warn' : ''}" style="margin-bottom:14px">
-          <div class="alert-icon">${over ? '⚠️' : '📊'}</div>
-          <div><div style="font-weight:600">送信量の目安（無料枠の推奨上限）</div>
+        // 通常時はバナー非表示。無料枠の推奨上限を超えたときだけ警告を出す（超過すると送信が無音で落ちるため安全網として残置）。
+        if (!over) return '';
+        return `<div class="alert warn" style="margin-bottom:14px">
+          <div class="alert-icon">⚠️</div>
+          <div><div style="font-weight:600">送信量が無料枠の推奨上限を超えています</div>
           <div class="muted" style="font-size:12.5px;margin-top:2px">
             推定ピーク: <b>${est.dailyTotal}</b> 件/日（同一送信時刻 最大 <b>${est.maxWindow}</b> 件）／
             推奨: 日次 ≤ ${est.recommendedDaily}・同一時刻 ≤ ${est.recommendedPerWindow}（送信予算 ${est.budget}/分）。
-            ${over ? '<b style="color:var(--warn)">推奨上限を超えています。</b>送信時刻を分散するか、Paid 化のうえ送信予算を上げてください。' : ''}
+            送信時刻を分散するか、Paid 化のうえ送信予算を上げてください。
           </div></div></div>`;
       }
       async function loadNotifications() {
@@ -921,10 +1199,10 @@
                 ${sched} ・ ${esc(chName(n.channel_id))}</div></div>
             <div class="actions">
               <span class="pill ${n.active ? 'on' : 'off'}">${n.active ? '有効' : '無効'}</span>
-              <button class="btn sm ghost" data-nrecruit="${n.id}">📣 募集</button>
-              <button class="btn sm ghost" data-nedit="${n.id}">編集</button>
-              <button class="btn sm ghost" data-nocc="${n.id}">開催回</button>
-              <button class="btn sm ghost danger" data-ndel="${n.id}">削除</button>
+              <button class="btn sm ghost" data-nrecruit="${esc(n.uuid)}">📣 募集</button>
+              <button class="btn sm ghost" data-nedit="${esc(n.uuid)}">編集</button>
+              <button class="btn sm ghost" data-nocc="${esc(n.uuid)}">番号割り当て/グループ分け</button>
+              <button class="btn sm ghost danger" data-ndel="${esc(n.uuid)}">削除</button>
             </div></div>`;
         }).join('');
 
@@ -932,26 +1210,22 @@
           <div class="sec-head"><h2>通知 (${notifs.length})</h2>
             <button class="btn" id="nNewBtn"${segs.length ? '' : ' disabled'}>＋ 新規通知</button></div>
           ${segs.length ? '' : '<p class="muted">※ 先に「メンバー区分」を作成してください（通知の対象になります）。</p>'}
-          ${notifs.length ? rows : '<div class="empty">まだ通知がありません。<br>「＋ 新規通知」から最初の通知を作成しましょう。</div>'}
-          <dialog class="modal-lg" id="occDialog" aria-labelledby="occTitle">
-            <div class="modal-head"><h3 id="occTitle">開催回</h3>
-              <button type="button" class="modal-close" data-occ-close aria-label="閉じる">✕</button></div>
-            <div class="modal-body" id="occBox"></div>
-            <div class="modal-foot"><button type="button" class="btn ghost" data-occ-close>閉じる</button></div>
-          </dialog>
-          ${segs.length ? notifForm() : ''}`;
+          ${notifs.length ? rows : '<div class="empty">まだ通知がありません。<br>「＋ 新規通知」から最初の通知を作成しましょう。</div>'}`;
 
+        // 通知フォーム（子ページ）は main 直下の #nFormHost に注入する（開催回/グループ分けの
+        // <dialog> は静的 HTML に常駐）。
+        $('#nFormHost').innerHTML = segs.length ? notifForm() : '';
         if (segs.length) {
           bindNotifForm();
-          $('#nNewBtn').onclick = () => openNotifModal(null);
+          $('#nNewBtn').onclick = () => navigate('notifications/new');
         }
         document.querySelectorAll('[data-nedit]').forEach((b) => {
-          b.onclick = () => openNotifModal(cacheNotifs.find((x) => x.id === Number(b.dataset.nedit)));
+          b.onclick = () => navigate('notifications/' + b.dataset.nedit + '/edit');
         });
         document.querySelectorAll('[data-nocc]').forEach((b) => {
-          b.onclick = () => loadOccurrences(Number(b.dataset.nocc));
+          b.onclick = () => navigate('notifications/' + b.dataset.nocc + '/occurrences');
         });
-        document.querySelectorAll('#occDialog [data-occ-close]').forEach((b) => { b.onclick = () => $('#occDialog').close(); });
+        document.querySelectorAll('#occDialog [data-occ-close]').forEach((b) => { b.onclick = (e) => { e.preventDefault(); closeOccurrencesPage(); }; });
         document.querySelectorAll('[data-nrecruit]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この通知の募集メッセージをチャンネルへ投稿します。', { okLabel: '送信する' }))) return;
@@ -964,7 +1238,7 @@
         });
         document.querySelectorAll('[data-ndel]').forEach((b) => {
           b.onclick = async () => {
-            if (!(await confirmDialog('この通知を、配下の開催回・回答ごとすべて削除します。元に戻せません。', { danger: true, okLabel: '削除' }))) return;
+            if (!(await confirmDialog('この通知を、配下の開催日・回答ごとすべて削除します。元に戻せません。', { danger: true, okLabel: '削除' }))) return;
             try { await api('/notifications/' + b.dataset.ndel, { method: 'DELETE' }); toast('削除しました'); loadNotifications(); }
             catch (e) { toast(e.message, true); }
           };
@@ -980,7 +1254,7 @@
       }
 
       function notifForm() {
-        const segOpts = cacheSegments.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+        const segOpts = cacheSegments.map((s) => `<option value="${esc(s.uuid)}">${esc(s.name)}</option>`).join('');
         const chOpts = cacheChannels.length
           ? cacheChannels.map((c) => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')
           : '<option value="">（チャンネルを取得できませんでした）</option>';
@@ -988,14 +1262,17 @@
         const hourOpts = Array.from({ length: 24 }, (_, h) =>
           `<option value="${h}"${h === 21 ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('');
         // 単発(oneoff)UI は撤去し recurring 専用。type は hidden で固定（oneoff の JS/バックエンドは休眠残置）。
-        // 案B: ネイティブ <dialog> モーダル。ヘッダ/フッタ固定・ボディのみスクロール。openNotifModal() で開く。
-        return `<dialog class="modal-lg" id="nDialog" aria-labelledby="nFormTitle">
+        // 子ページ（メインエリア差し替え・ADR 0016）。<dialog>.show() で開く（openNotifModal）。
+        return `<dialog class="modal-lg as-page" id="nDialog" aria-labelledby="nFormTitle">
           <input type="hidden" id="nId" value="" />
           <input type="hidden" id="nType" value="recurring" />
 
           <div class="modal-head">
-            <h3 id="nFormTitle">新規通知</h3>
-            <button type="button" class="modal-close" id="nClose" aria-label="閉じる">✕</button>
+            <div>
+              <div class="page-crumb"><a href="#" id="nCrumbBack">通知</a> <span>›</span> <span id="nCrumbLeaf">新規</span></div>
+              <h3 id="nFormTitle">新規通知</h3>
+            </div>
+            <button type="button" class="page-back" id="nClose" aria-label="戻る">← 戻る</button>
           </div>
 
           <div class="modal-body">
@@ -1106,6 +1383,10 @@
                   <div class="setting-row-main"><div class="setting-row-title">番号割り当て</div><div class="setting-row-desc">参加者に連番 1..N をランダムに割り当てます（個室・座席等）。</div></div>
                   <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nAssignment" aria-label="番号割り当て" /><span class="switch-slider"></span></label></div>
                 </div>
+                <div class="setting-row" id="nGroupingRow">
+                  <div class="setting-row-main"><div class="setting-row-title">グループ分け</div><div class="setting-row-desc">参加者を複数のグループに分割します（管理画面でドラッグ＆ドロップ・ペア制約対応）。</div></div>
+                  <div class="setting-row-control"><label class="switch"><input type="checkbox" id="nGrouping" aria-label="グループ分け" /><span class="switch-slider"></span></label></div>
+                </div>
 
                 <div class="subhead">状態</div>
                 <div class="setting-row">
@@ -1139,10 +1420,11 @@
         $('#nNextBox').classList.toggle('hidden', mode !== 'biweekly');
         // 回答不要(通知のみ)は回答依存の機能（リマインド/ノルマ/番号/締切）を隠す（ADR 0010/0014）。
         const announceOnly = !$('#nRequireResponse').checked;
-        if (announceOnly) { $('#nQuota').checked = false; $('#nAssignment').checked = false; }
+        if (announceOnly) { $('#nQuota').checked = false; $('#nAssignment').checked = false; $('#nGrouping').checked = false; }
         $('#nQuotaRow').classList.toggle('hidden', announceOnly);
         $('#nQuotaBox').classList.toggle('hidden', announceOnly || !$('#nQuota').checked);
         $('#nAssignmentRow').classList.toggle('hidden', announceOnly);
+        $('#nGroupingRow').classList.toggle('hidden', announceOnly);
         $('#nRemindStartBox').classList.toggle('hidden', announceOnly);
         $('#nRemindUndecidedBox').classList.toggle('hidden', announceOnly);
         $('#nDeadlineBox').classList.toggle('hidden', announceOnly);
@@ -1191,14 +1473,13 @@
         $('#nQuota').onchange = syncNotifUI;
         $('#nMonthlyAdd').onclick = addMonthlyRule;
         $('#nSave').onclick = (e) => withBusy(e.currentTarget, saveNotif);
-        // モーダル開閉・破棄ガード（dirty 時のみ確認）。ESC/背景クリックも同経路。
+        // 子ページ開閉・破棄ガード（dirty 時のみ確認）。
         const dlg = $('#nDialog');
         $('#nClose').onclick = attemptCloseNotif;
         $('#nCancel').onclick = attemptCloseNotif;
+        const crumb = $('#nCrumbBack'); if (crumb) crumb.onclick = (e) => { e.preventDefault(); attemptCloseNotif(); };
         dlg.addEventListener('input', markDirty);
         dlg.addEventListener('change', markDirty);
-        dlg.addEventListener('cancel', (e) => { e.preventDefault(); attemptCloseNotif(); });
-        dlg.addEventListener('click', (e) => { if (e.target === dlg) attemptCloseNotif(); });
         syncNotifUI();
       }
       // 新規=空で開く／編集=流し込んで開く。値はプログラム設定なので input/change は発火せず dirty は立たない。
@@ -1209,12 +1490,14 @@
         if (n) fillNotifForm(n);
         $('#nFormErr').textContent = '';
         formDirty = false;
-        dlg.showModal();
-        const first = $('#nName'); if (first) first.focus(); // 開いた直後は✕でなく先頭入力へ
+        openAsPage(dlg);
+        const first = $('#nName'); if (first) first.focus();
       }
       async function attemptCloseNotif() {
         if (formDirty && !(await confirmDiscardNotif())) return;
-        $('#nDialog').close();
+        formDirty = false;
+        closeAsPage($('#nDialog'));
+        navigate(''); // 親（一覧）へ
       }
       // フォームモーダルは top-layer のため、確認も <dialog>（div の confirmDialog は下に隠れる）。
       function confirmDiscardNotif() {
@@ -1239,6 +1522,7 @@
       }
       function resetNotifForm() {
         $('#nId').value = ''; $('#nFormTitle').textContent = '新規通知';
+        { const c = $('#nCrumbLeaf'); if (c) c.textContent = '新規'; }
         $('#nName').value = ''; $('#nTitle').value = ''; $('#nBody').value = '';
         $('#nMode').value = 'weekly';
         $('#nWeekday').value = 'SA'; renderMonthlyRules([]);
@@ -1255,7 +1539,8 @@
         if (!n || !$('#nId')) return;
         // 単発(oneoff)UI は撤去済み。万一の旧データはこのフォームで編集しない（保存で壊さないため）。
         if (n.type === 'oneoff') { toast('単発通知の編集は現在無効です。', true); return; }
-        $('#nId').value = n.id; $('#nFormTitle').textContent = '編集 (ID: ' + n.id + ')';
+        $('#nId').value = n.uuid; $('#nFormTitle').textContent = '編集';
+        { const c = $('#nCrumbLeaf'); if (c) c.textContent = '編集'; }
         $('#nName').value = n.name || '';
         $('#nTitle').value = n.message_title || '';
         $('#nBody').value = n.message_body || '';
@@ -1263,7 +1548,9 @@
           $('#nChannel').insertAdjacentHTML('afterbegin', `<option value="${esc(n.channel_id)}">ID: ${esc(n.channel_id)}</option>`);
         }
         $('#nChannel').value = n.channel_id || '';
-        $('#nSegment').value = String(n.segment_id);
+        // segment_uuid を選択（cacheSegments から id → uuid を解決）
+        const seg = cacheSegments.find((s) => s.id === n.segment_id);
+        $('#nSegment').value = seg ? seg.uuid : '';
         const b = parseRRuleToBuilder(n.rrule);
         $('#nMode').value = b.mode; $('#nWeekday').value = b.byday;
         renderMonthlyRules(b.mode === 'monthly' ? b.rules : []);
@@ -1273,6 +1560,7 @@
         $('#nRemindUndecided').value = n.remind_undecided_days;
         $('#nQuotaInterval').value = n.quota_interval_days == null ? '' : n.quota_interval_days;
         $('#nQuota').checked = !!n.quota_enabled; $('#nAssignment').checked = !!n.assignment_enabled;
+        $('#nGrouping').checked = !!n.grouping_enabled;
         $('#nMention').value = n.mention_mode || 'role';
         $('#nRequireResponse').checked = n.requires_response == null ? true : !!n.requires_response;
         $('#nActive').checked = !!n.active;
@@ -1293,7 +1581,7 @@
           guild_id: guild.id,
           name: $('#nName').value.trim(),
           channel_id: $('#nChannel').value.trim(),
-          segment_id: Number($('#nSegment').value),
+          segment_uuid: $('#nSegment').value,
           type: 'recurring',
           rrule: buildRRule(),
           anchor_date: $('#nMode').value === 'biweekly' ? ($('#nNext').value || null) : null,
@@ -1307,6 +1595,7 @@
           quota_enabled: $('#nQuota').checked ? 1 : 0,
           quota_interval_days: qi === '' ? null : Number(qi),
           assignment_enabled: $('#nAssignment').checked ? 1 : 0,
+          grouping_enabled: $('#nGrouping').checked ? 1 : 0,
           mention_mode: $('#nMention').value,
           requires_response: $('#nRequireResponse').checked ? 1 : 0,
           // ③ 送信時刻・① 回答締切/変更通知チャンネル
@@ -1320,16 +1609,16 @@
         if (!body.name) return err('名前は必須です');
         if (!body.message_title) return err('見出しは必須です');
         if (!body.channel_id) return err('チャンネルを選択してください');
-        if (!body.segment_id) return err('区分を選択してください');
+        if (!body.segment_uuid) return err('区分を選択してください');
         $('#nFormErr').textContent = '';
-        const id = $('#nId').value;
+        const uuid = $('#nId').value;
         try {
-          if (id) await api('/notifications/' + id, { method: 'PUT', body: JSON.stringify(body) });
+          if (uuid) await api('/notifications/' + uuid, { method: 'PUT', body: JSON.stringify(body) });
           else await api('/notifications', { method: 'POST', body: JSON.stringify(body) });
           formDirty = false;
-          $('#nDialog').close();
-          toast(id ? '更新しました' : '作成しました');
-          loadNotifications();
+          closeAsPage($('#nDialog'));
+          navigate(''); // 一覧に戻る
+          toast(uuid ? '更新しました' : '作成しました');
         } catch (e) { $('#nFormErr').textContent = e.message; }
       }
 
@@ -1339,14 +1628,16 @@
         try { cacheNotifs = await api('/notifications?guild_id=' + encodeURIComponent(guild.id)); } catch (_) {}
         fn();
       }
-      async function loadOccTally(occId) {
-        const el = $('#tally-' + occId);
+      async function loadOccTally(occUuid) {
+        const el = $('#tally-' + cssId(occUuid));
         if (!el) return;
         try {
-          const b = await api('/occurrences/' + occId + '/status');
+          const b = await api('/occurrences/' + occUuid + '/status');
           el.textContent = `参加 ${b.参加.length}・不参加 ${b.不参加.length}・未定 ${b.未定.length}・未回答 ${b.未回答.length}`;
         } catch (_) { el.textContent = ''; }
       }
+      // CSS セレクタで使える ID 形式に変換（UUID のハイフンは CSS でそのまま使えるが、念のため）
+      function cssId(uuid) { return String(uuid || '').replace(/[^A-Za-z0-9-]/g, ''); }
       const JADOW = ['日', '月', '火', '水', '木', '金', '土'];
       function jaDow(dateStr) {
         const [y, m, d] = (dateStr || '').split('/').map(Number);
@@ -1357,74 +1648,459 @@
         const w = jaDow(o.occurrence_date);
         return `${o.occurrence_date}${w ? ` (${w})` : ''}${o.start_time ? ' ' + fmtTimeRange(o.start_time, dur) : ''}`;
       }
-      async function loadOccurrences(notifId) {
-        const n = cacheNotifs.find((x) => x.id === notifId);
+      async function loadOccurrences(notifUuid) {
+        const n = cacheNotifs.find((x) => x.uuid === notifUuid);
         const isOneoff = !!n && n.type === 'oneoff';
-        const decidedId = n ? n.decided_occurrence_id : null;
+        // 確定回の UUID（旧 decided_occurrence_id は INTEGER のため、cacheNotifs の文脈で id→uuid 解決は別ロード時にやる）
+        const decidedOccId = n ? n.decided_occurrence_id : null;
         let occs = [];
-        try { occs = await api('/notifications/' + notifId + '/occurrences'); } catch (e) { return toast(e.message, true); }
+        try { occs = await api('/notifications/' + notifUuid + '/occurrences'); } catch (e) { return toast(e.message, true); }
         const rows = occs.map((o) => {
-          const decided = decidedId === o.id;
+          const decided = decidedOccId === o.id;
           const label = o.status === 'cancelled' ? '取下げ' : (decided ? '確定' : (isOneoff ? '候補' : '予定'));
           const pillCls = o.status === 'cancelled' ? 'off' : 'on';
-          const decideBtn = (isOneoff && decidedId == null && o.status === 'scheduled')
-            ? `<button class="btn sm" data-decide="${o.id}" data-nid="${notifId}">この日時に確定</button>` : '';
+          const decideBtn = (isOneoff && decidedOccId == null && o.status === 'scheduled')
+            ? `<button class="btn sm" data-decide="${esc(o.uuid)}" data-nuuid="${esc(notifUuid)}">この日時に確定</button>` : '';
           const undecideBtn = decided
-            ? `<button class="btn sm ghost" data-undecide="${notifId}">確定解除</button>` : '';
+            ? `<button class="btn sm ghost" data-undecide="${esc(notifUuid)}">確定解除</button>` : '';
           return `<div class="pickrow">
             <div>${esc(occLabel(o, n && n.duration_minutes))} <span class="pill ${pillCls}">${label}</span>
-              <br><span class="muted" id="tally-${o.id}" style="font-size:12px">集計中…</span></div>
+              <br><span class="muted" id="tally-${cssId(o.uuid)}" style="font-size:12px">集計中…</span></div>
             <div class="actions">${decideBtn}${undecideBtn}
-              <button class="btn sm secondary" data-occ="${o.id}">番号割り当て</button></div></div>`;
+              ${n && n.assignment_enabled ? `<button class="btn sm secondary" data-occ="${esc(o.uuid)}">番号割り当て</button>` : ''}
+              ${n && n.grouping_enabled ? `<button class="btn sm secondary" data-grouping-occ="${esc(o.uuid)}" data-nuuid="${esc(notifUuid)}">グループ分け</button>` : ''}</div></div>`;
         }).join('');
         const recruitBtn = n
-          ? `<div class="actions" style="margin-bottom:8px"><button class="btn sm secondary" id="occRecruit">📣 今すぐ募集を投稿</button></div>` : '';
-        $('#occTitle').textContent = `開催回: ${n ? n.name : notifId} (${occs.length})`;
+          ? `` : '';
+        $('#occTitle').textContent = `番号割り当て/グループ分け: ${n ? n.name : notifUuid} (${occs.length})`;
+        const _occCrumb = $('#occCrumb'); if (_occCrumb) _occCrumb.textContent = n ? n.name : '番号割り当て/グループ分け';
         $('#occBox').innerHTML = `${recruitBtn}
-          ${occs.length ? rows : '<div class="empty">開催回はまだありません。<br>単発は保存時に候補が、繰り返しは募集タイミングで生成されます。</div>'}
+          ${occs.length ? rows : '<div class="empty">対象の開催日がまだありません。<br>単発は保存時に候補が、繰り返しは募集タイミングで生成されます。</div>'}
           <div id="assignBox"></div>`;
-        const _od = $('#occDialog'); if (_od && !_od.open) _od.showModal();
-        document.querySelectorAll('[data-occ]').forEach((b) => { b.onclick = () => loadAssignments(Number(b.dataset.occ)); });
+        openAsPage($('#occDialog'));
+        document.querySelectorAll('[data-occ]').forEach((b) => { b.onclick = () => loadAssignments(b.dataset.occ); });
+        document.querySelectorAll('[data-grouping-occ]').forEach((b) => {
+          b.onclick = () => navigate('notifications/' + b.dataset.nuuid + '/occurrences/' + b.dataset.groupingOcc + '/grouping');
+        });
         const rb = $('#occRecruit');
         if (rb) rb.onclick = async () => {
           if (!(await confirmDialog('この通知の募集メッセージをチャンネルへ投稿します。', { okLabel: '送信する' }))) return;
           await withBusy(rb, async () => {
-            try { const r = await api('/notifications/' + notifId + '/recruit', { method: 'POST' });
+            try { const r = await api('/notifications/' + notifUuid + '/recruit', { method: 'POST' });
               toast(r && r.message ? r.message : '募集を送信しました'); } catch (e) { toast(e.message, true); }
           });
         };
         document.querySelectorAll('[data-decide]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この日時を開催として確定し、他の候補をすべて取り下げます。', { okLabel: '確定する' }))) return;
-            try { await api('/notifications/' + b.dataset.nid + '/decide',
-              { method: 'POST', body: JSON.stringify({ occurrence_id: Number(b.dataset.decide) }) });
-              toast('確定しました'); refreshNotifsThen(() => loadOccurrences(notifId)); } catch (e) { toast(e.message, true); }
+            try { await api('/notifications/' + b.dataset.nuuid + '/decide',
+              { method: 'POST', body: JSON.stringify({ occurrence_uuid: b.dataset.decide }) });
+              toast('確定しました'); refreshNotifsThen(() => loadOccurrences(notifUuid)); } catch (e) { toast(e.message, true); }
           };
         });
         document.querySelectorAll('[data-undecide]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('確定を解除し、取り下げた候補を元に戻します。', { okLabel: '解除する' }))) return;
             try { await api('/notifications/' + b.dataset.undecide + '/undecide', { method: 'POST' });
-              toast('解除しました'); refreshNotifsThen(() => loadOccurrences(notifId)); } catch (e) { toast(e.message, true); }
+              toast('解除しました'); refreshNotifsThen(() => loadOccurrences(notifUuid)); } catch (e) { toast(e.message, true); }
           };
         });
-        for (const o of occs) loadOccTally(o.id);
+        for (const o of occs) loadOccTally(o.uuid);
       }
-      function renderAssignments(occId, list) {
+      function renderAssignments(occUuid, list) {
         const rows = (list || []).map((a) => `<tr><td>#${a.number}</td><td>${esc(a.name || a.user_id)}</td><td class="muted">${esc(a.user_id)}</td></tr>`).join('');
-        $('#assignBox').innerHTML = `<h3 style="margin-top:14px">番号割り当て（開催回 ${occId}）</h3>
+        $('#assignBox').innerHTML = `<h3 style="margin-top:14px">番号割り当て</h3>
           ${list && list.length ? `<table><thead><tr><th>番号</th><th>表示名</th><th>User ID</th></tr></thead><tbody>${rows}</tbody></table>`
             : '<p class="muted">割り当てはまだありません。</p>'}
-          <div class="actions" style="margin-top:10px"><button class="btn" id="runAssign" data-occ="${occId}">番号割り当てを実行</button></div>`;
+          <div class="actions" style="margin-top:10px"><button class="btn" id="runAssign" data-occ="${esc(occUuid)}">番号割り当てを実行</button></div>`;
         $('#runAssign').onclick = async () => {
-          if (!(await confirmDialog('この開催回で番号割り当てを実行します。', { okLabel: '実行する' }))) return;
-          try { const res = await api('/occurrences/' + occId + '/assign', { method: 'POST' });
+          if (!(await confirmDialog('この開催日で番号割り当てを実行します。', { okLabel: '実行する' }))) return;
+          try { const res = await api('/occurrences/' + occUuid + '/assign', { method: 'POST' });
             toast(`割り当て実行: 新規 ${res && res.assigned ? res.assigned.length : 0} 名`);
-            renderAssignments(occId, res && res.all ? res.all : []); } catch (e) { toast(e.message, true); }
+            renderAssignments(occUuid, res && res.all ? res.all : []); } catch (e) { toast(e.message, true); }
         };
       }
-      async function loadAssignments(occId) {
-        try { renderAssignments(occId, await api('/occurrences/' + occId + '/assignments')); } catch (e) { toast(e.message, true); }
+      async function loadAssignments(occUuid) {
+        try { renderAssignments(occUuid, await api('/occurrences/' + occUuid + '/assignments')); } catch (e) { toast(e.message, true); }
+      }
+
+      // ----- グループ分け（ADR 0015）-----
+      // groupingState: 現在開いているグループ分けの状態を保持する。
+      // - occId / notifId: 対象
+      // - view: API から取得した GroupingView（grouping/groups/pool/diff）
+      // - constraints: その通知のペア制約一覧
+      // - sortables: SortableJS インスタンス配列（cleanup 用）
+      // - dirty: 保存が必要な変更があるか
+      const groupingState = { occUuid: null, notifUuid: null, view: null, constraints: [], sortables: [], dirty: false };
+
+      async function openGroupingDialog(occUuid, notifUuid) {
+        groupingState.occUuid = occUuid;
+        groupingState.notifUuid = notifUuid;
+        groupingState.dirty = false;
+        $('#groupingErr').textContent = '';
+        const dlg = $('#groupingDialog');
+        $('#groupingBox').innerHTML = '<p class="muted">読み込み中…</p>';
+        openAsPage(dlg);
+        $('#groupingClose').onclick = $('#groupingCancel').onclick = attemptCloseGrouping;
+        const gcrumb = $('#groupingCrumbBack');
+        if (gcrumb) gcrumb.onclick = (e) => { e.preventDefault(); attemptCloseGrouping(); };
+        try {
+          await reloadGroupingView();
+          $('#groupingSave').onclick = (e) => withBusy(e.currentTarget, saveGroupingMembers);
+          $('#groupingAnnounce').onclick = (e) => withBusy(e.currentTarget, announceGrouping);
+        } catch (e) { toast(e.message, true); }
+      }
+      async function attemptCloseGrouping() {
+        if (groupingState.dirty) {
+          if (!(await confirmDialog('未保存の変更があります。閉じてもよろしいですか？', { okLabel: '閉じる', danger: true }))) return;
+        }
+        teardownSortables();
+        groupingState.dirty = false;
+        closeAsPage($('#groupingDialog'));
+        // 親（開催回ページ）へ戻る
+        if (groupingState.notifUuid) {
+          navigate('notifications/' + groupingState.notifUuid + '/occurrences');
+        }
+      }
+      function teardownSortables() {
+        for (const s of groupingState.sortables) { try { s.destroy(); } catch (_) {} }
+        groupingState.sortables = [];
+      }
+      async function reloadGroupingView() {
+        const occUuid = groupingState.occUuid;
+        const view = await api('/occurrences/' + occUuid + '/grouping');
+        groupingState.view = view;
+        try {
+          groupingState.constraints = await api('/notifications/' + groupingState.notifUuid + '/constraints');
+        } catch (_) { groupingState.constraints = []; }
+        renderGroupingDialog();
+      }
+      function renderGroupingDialog() {
+        const view = groupingState.view;
+        const groupCount = view.grouping ? view.grouping.group_count : 2;
+        const toolbar = `
+          <div class="grouping-toolbar">
+            <label>グループ数</label>
+            <input type="number" id="groupingCount" min="1" max="50" value="${groupCount}" style="width:80px" />
+            <button class="btn sm secondary" id="groupingApplyCount">反映</button>
+            <button class="btn sm secondary" id="groupingAuto">🎲 自動配置</button>
+            <button class="btn sm ghost" id="groupingClear">クリア</button>
+            <span class="spacer"></span>
+            <span class="muted" style="font-size:12px">${view.grouping ? '保存済み' : '未保存'} · 参加 ${countCurrentParticipants(view)}名</span>
+          </div>`;
+        const poolCol = renderColumn({ id: 'pool', name: '未割り当て', members: view.pool }, true);
+        const groupCols = (view.groups || []).map((g) => renderColumn(g, false)).join('');
+        const board = `<div class="grouping-board" id="groupingBoard">${poolCol}${groupCols}</div>`;
+        const alerts = `<div id="groupingAlerts"></div>`;
+        const constraintsPanel = renderConstraintsPanel();
+        $('#groupingBox').innerHTML = toolbar + board + alerts + constraintsPanel;
+        wireGroupingDialogControls();
+        wireSortables();
+        evaluateAndPaintViolations();
+      }
+      function countCurrentParticipants(view) {
+        let n = view.pool.length;
+        for (const g of (view.groups || [])) {
+          for (const m of g.members) {
+            if (!view.diff.no_longer_participating.some((x) => x.user_id === m.user_id && x.group_id === g.id)) n++;
+          }
+        }
+        return n;
+      }
+      function renderColumn(g, isPool) {
+        const cls = isPool ? 'grouping-col pool' : 'grouping-col';
+        // DOM data 属性として保持する識別子。pool は文字列、それ以外は group の UUID。
+        const groupKey = isPool ? 'pool' : esc(g.uuid);
+        const cards = (g.members || []).map((m) => renderCard(m, isPool ? null : g.id)).join('');
+        const head = isPool
+          ? `<div class="grouping-col-head"><span class="name">📥 ${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`
+          : `<div class="grouping-col-head"><span class="name" data-group-uuid="${esc(g.uuid)}" contenteditable="false" title="クリックで名前変更">${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`;
+        return `<div class="${cls}" data-group-key="${groupKey}">
+          ${head}
+          <div class="grouping-cards" data-group-key="${groupKey}">${cards}</div>
+        </div>`;
+      }
+      function renderCard(m, currentGroupId) {
+        const view = groupingState.view;
+        const isGone = currentGroupId !== null && view.diff.no_longer_participating.some(
+          (x) => x.user_id === m.user_id && x.group_id === currentGroupId,
+        );
+        const isNew = currentGroupId === null && view.diff.newly_participating.some((x) => x.user_id === m.user_id);
+        const badge = isGone ? '<span class="badge gone">不参加に変更</span>'
+          : (isNew && view.grouping ? '<span class="badge new">新規参加</span>' : '');
+        return `<div class="grouping-card${isGone ? ' no-longer' : ''}" data-user-id="${esc(m.user_id)}">
+          <span>${esc(m.name)}</span>${badge}
+        </div>`;
+      }
+      function wireGroupingDialogControls() {
+        $('#groupingApplyCount').onclick = (e) => withBusy(e.currentTarget, async () => {
+          const gc = Number($('#groupingCount').value);
+          if (!Number.isInteger(gc) || gc < 1 || gc > 50) return toast('グループ数は 1〜50', true);
+          try {
+            // 未保存の現在の配置をまず保存してからグループ数を変更（誤って消えないように）
+            if (groupingState.view.grouping) await saveGroupingMembers(true);
+            await api('/occurrences/' + groupingState.occUuid + '/grouping',
+              { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
+            await reloadGroupingView();
+            groupingState.dirty = false;
+          } catch (e) { toast(e.message, true); }
+        });
+        $('#groupingAuto').onclick = (e) => withBusy(e.currentTarget, async () => {
+          if (!groupingState.view.grouping) {
+            const gc = Number($('#groupingCount').value);
+            if (!Number.isInteger(gc) || gc < 1) return toast('グループ数を指定してください', true);
+            await api('/occurrences/' + groupingState.occUuid + '/grouping',
+              { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
+          }
+          try {
+            await api('/occurrences/' + groupingState.occUuid + '/grouping/auto-assign', { method: 'POST' });
+            await reloadGroupingView();
+            groupingState.dirty = false;
+            toast('自動配置しました');
+          } catch (e) { toast(e.message, true); }
+        });
+        $('#groupingClear').onclick = async () => {
+          if (!(await confirmDialog('全メンバーをプールに戻します。', { okLabel: 'クリア' }))) return;
+          if (!groupingState.view.grouping) return;
+          try {
+            const assignments = groupingState.view.groups.map((g) => ({ group_uuid: g.uuid, user_ids: [] }));
+            await api('/occurrences/' + groupingState.occUuid + '/grouping/members',
+              { method: 'PUT', body: JSON.stringify({ assignments }) });
+            await reloadGroupingView();
+            groupingState.dirty = false;
+          } catch (e) { toast(e.message, true); }
+        };
+        // グループ名のインライン編集
+        document.querySelectorAll('#groupingBoard .grouping-col-head .name[data-group-uuid]').forEach((el) => {
+          el.onclick = () => {
+            el.contentEditable = 'true';
+            el.focus();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(range);
+          };
+          el.onblur = async () => {
+            el.contentEditable = 'false';
+            const newName = el.textContent.trim().slice(0, 50);
+            if (!newName) { el.textContent = '（名無し）'; return; }
+            const guuid = el.dataset.groupUuid;
+            try {
+              await api('/occurrences/' + groupingState.occUuid + '/grouping/rename',
+                { method: 'PUT', body: JSON.stringify({ group_uuid: guuid, name: newName }) });
+              const g = groupingState.view.groups.find((x) => x.uuid === guuid);
+              if (g) g.name = newName;
+            } catch (e) { toast(e.message, true); }
+          };
+          el.onkeydown = (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+            if (ev.key === 'Escape') { ev.preventDefault(); el.blur(); }
+          };
+        });
+      }
+      function wireSortables() {
+        teardownSortables();
+        if (typeof window.Sortable === 'undefined') { console.warn('SortableJS not loaded'); return; }
+        const cardsEls = document.querySelectorAll('#groupingBoard .grouping-cards');
+        cardsEls.forEach((el) => {
+          const s = window.Sortable.create(el, {
+            group: 'grouping',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            onEnd: () => {
+              groupingState.dirty = true;
+              recalcCounts();
+              evaluateAndPaintViolations();
+            },
+          });
+          groupingState.sortables.push(s);
+        });
+      }
+      function recalcCounts() {
+        document.querySelectorAll('#groupingBoard .grouping-cards').forEach((el) => {
+          const key = el.dataset.groupKey;
+          const c = el.querySelectorAll('.grouping-card').length;
+          const counter = document.querySelector('#count-' + (key === 'pool' ? 'pool' : CSS.escape(key)));
+          if (counter) counter.textContent = String(c);
+        });
+      }
+      function collectCurrentAssignments() {
+        // 現状の DOM から、各グループに含まれるユーザーID配列を抽出する（group_uuid キー）
+        const assignments = [];
+        const groupOf = new Map(); // user_id -> group_uuid (string) or null for pool
+        document.querySelectorAll('#groupingBoard .grouping-cards').forEach((el) => {
+          const key = el.dataset.groupKey;
+          const userIds = Array.from(el.querySelectorAll('.grouping-card')).map((c) => c.dataset.userId);
+          if (key !== 'pool') {
+            assignments.push({ group_uuid: key, user_ids: userIds });
+            for (const u of userIds) groupOf.set(u, key);
+          } else {
+            for (const u of userIds) groupOf.set(u, null);
+          }
+        });
+        return { assignments, groupOf };
+      }
+      function evaluateAndPaintViolations() {
+        // カードのハイライトをいったんクリア
+        document.querySelectorAll('#groupingBoard .grouping-card').forEach((el) => {
+          el.classList.remove('violated-required');
+          el.classList.remove('violated-preferred');
+        });
+        const { groupOf } = collectCurrentAssignments();
+        const required = [], preferred = [];
+        for (const c of groupingState.constraints) {
+          const ga = groupOf.get(c.user_id_a);
+          const gb = groupOf.get(c.user_id_b);
+          if (ga === undefined || gb === undefined) continue;
+          if (ga === null || gb === null) continue; // 片方プールはスキップ
+          const violated = c.direction === 'together' ? ga !== gb : ga === gb;
+          if (!violated) continue;
+          const list = c.strength === 'required' ? required : preferred;
+          list.push(c);
+        }
+        for (const c of required) {
+          highlightCard(c.user_id_a, 'violated-required');
+          highlightCard(c.user_id_b, 'violated-required');
+        }
+        for (const c of preferred) {
+          highlightCard(c.user_id_a, 'violated-preferred');
+          highlightCard(c.user_id_b, 'violated-preferred');
+        }
+        renderViolationAlerts(required, preferred);
+      }
+      function highlightCard(userId, cls) {
+        document.querySelectorAll(`.grouping-card[data-user-id="${cssEscape(userId)}"]`).forEach((el) => {
+          // 必須違反は推奨より強い表示にする
+          if (cls === 'violated-required' || !el.classList.contains('violated-required')) el.classList.add(cls);
+        });
+      }
+      function cssEscape(s) { return String(s).replace(/[^\w-]/g, '\\$&'); }
+      function nameOfUser(userId) {
+        const view = groupingState.view;
+        for (const g of (view.groups || [])) { const m = g.members.find((x) => x.user_id === userId); if (m) return m.name; }
+        const p = view.pool.find((x) => x.user_id === userId); if (p) return p.name;
+        return userId;
+      }
+      function renderViolationAlerts(required, preferred) {
+        const el = $('#groupingAlerts');
+        if (!required.length && !preferred.length) { el.innerHTML = ''; return; }
+        const reqItems = required.map((c) => `<li class="err">必須: ${esc(nameOfUser(c.user_id_a))} と ${esc(nameOfUser(c.user_id_b))} は${c.direction === 'together' ? '同じ' : '別の'}グループにしてください</li>`).join('');
+        const prefItems = preferred.map((c) => `<li class="warn">推奨: ${esc(nameOfUser(c.user_id_a))} と ${esc(nameOfUser(c.user_id_b))} は${c.direction === 'together' ? 'なるべく同じ' : 'なるべく別の'}グループに</li>`).join('');
+        el.innerHTML = `<div class="grouping-alerts ${required.length ? 'has-error' : ''}">
+          <h4>制約違反 (必須 ${required.length} / 推奨 ${preferred.length})</h4>
+          <ul>${reqItems}${prefItems}</ul>
+        </div>`;
+      }
+      function renderConstraintsPanel() {
+        const view = groupingState.view;
+        // 参加者の選択肢: 現在参加（pool + 各グループのうち no_longer でない）
+        const candidates = [];
+        const seen = new Set();
+        for (const p of view.pool) { if (!seen.has(p.user_id)) { candidates.push(p); seen.add(p.user_id); } }
+        for (const g of (view.groups || [])) {
+          for (const m of g.members) {
+            const gone = view.diff.no_longer_participating.some((x) => x.user_id === m.user_id && x.group_id === g.id);
+            if (!gone && !seen.has(m.user_id)) { candidates.push(m); seen.add(m.user_id); }
+          }
+        }
+        const opts = candidates.map((c) => `<option value="${esc(c.user_id)}">${esc(c.name)}</option>`).join('');
+        const rows = groupingState.constraints.map((c) => `
+          <div class="grouping-constraint-row" data-cuuid="${esc(c.uuid)}">
+            <span>${esc(nameOfUser(c.user_id_a))} ${c.direction === 'together' ? '🤝' : '🚫'} ${esc(nameOfUser(c.user_id_b))}</span>
+            <span class="pill ${c.strength === 'required' ? 'off' : 'on'}" style="font-size:11px">${c.strength === 'required' ? '必須' : '推奨'}</span>
+            <span class="spacer"></span>
+            <button class="btn sm ghost" data-del-constraint="${esc(c.uuid)}">削除</button>
+          </div>`).join('');
+        return `<div class="grouping-constraints-panel">
+          <h4>ペア制約（この通知の全開催日で共有）</h4>
+          <div class="grouping-constraints-list" id="constraintsList">
+            ${rows || '<p class="muted" style="font-size:12px;margin:0">まだ制約はありません。</p>'}
+          </div>
+          <div class="grouping-constraints-form">
+            <select id="cUserA"><option value="">メンバーA</option>${opts}</select>
+            <select id="cUserB"><option value="">メンバーB</option>${opts}</select>
+            <select id="cDirection">
+              <option value="together">🤝 同じグループに</option>
+              <option value="apart">🚫 別のグループに</option>
+            </select>
+            <select id="cStrength">
+              <option value="required">必須</option>
+              <option value="preferred">推奨</option>
+            </select>
+            <button class="btn sm" id="cAdd">＋ 追加</button>
+          </div>
+        </div>`;
+      }
+      // ペア制約パネル内のボタンをバインド（renderConstraintsPanel 後）
+      function wireConstraintsPanel() {
+        const add = $('#cAdd'); if (!add) return;
+        add.onclick = async () => {
+          const a = $('#cUserA').value, b = $('#cUserB').value;
+          if (!a || !b || a === b) return toast('異なる 2 名を選んでください', true);
+          const direction = $('#cDirection').value, strength = $('#cStrength').value;
+          try {
+            await api('/notifications/' + groupingState.notifUuid + '/constraints',
+              { method: 'POST', body: JSON.stringify({ user_id_a: a, user_id_b: b, direction, strength }) });
+            await reloadGroupingView();
+            wireConstraintsPanel();
+          } catch (e) { toast(e.message, true); }
+        };
+        document.querySelectorAll('[data-del-constraint]').forEach((b) => {
+          b.onclick = async () => {
+            const cuuid = b.dataset.delConstraint;
+            try {
+              await api('/notifications/' + groupingState.notifUuid + '/constraints/' + cuuid, { method: 'DELETE' });
+              await reloadGroupingView();
+              wireConstraintsPanel();
+            } catch (e) { toast(e.message, true); }
+          };
+        });
+      }
+      // renderGroupingDialog 後に呼ばれるよう、wireGroupingDialogControls を拡張するか、
+      // ここでパッチを当てる: renderGroupingDialog の末尾に wireConstraintsPanel を追加
+      const _origWireGroupingDialogControls = wireGroupingDialogControls;
+      wireGroupingDialogControls = function () {
+        _origWireGroupingDialogControls.apply(this, arguments);
+        wireConstraintsPanel();
+      };
+      async function saveGroupingMembers(silent) {
+        if (!groupingState.view || !groupingState.view.grouping) {
+          const gc = Number($('#groupingCount').value);
+          if (!Number.isInteger(gc) || gc < 1) { toast('グループ数を指定してください', true); return; }
+          await api('/occurrences/' + groupingState.occUuid + '/grouping',
+            { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
+          await reloadGroupingView();
+        }
+        const { assignments, groupOf } = collectCurrentAssignments();
+        const requiredViolations = groupingState.constraints.filter((c) => {
+          const ga = groupOf.get(c.user_id_a), gb = groupOf.get(c.user_id_b);
+          if (ga == null || gb == null) return false;
+          if (c.strength !== 'required') return false;
+          return c.direction === 'together' ? ga !== gb : ga === gb;
+        });
+        if (requiredViolations.length > 0) {
+          const ok = await confirmDialog(`必須制約に ${requiredViolations.length} 件の違反があります。このまま保存しますか？`, { okLabel: '保存する', danger: true });
+          if (!ok) return;
+        }
+        try {
+          await api('/occurrences/' + groupingState.occUuid + '/grouping/members',
+            { method: 'PUT', body: JSON.stringify({ assignments }) });
+          groupingState.dirty = false;
+          if (!silent) toast('保存しました');
+          await reloadGroupingView();
+        } catch (e) { toast(e.message, true); }
+      }
+      async function announceGrouping() {
+        if (groupingState.dirty) {
+          if (!(await confirmDialog('未保存の変更があります。保存してから投稿しますか？', { okLabel: '保存して投稿' }))) return;
+          await saveGroupingMembers(true);
+        }
+        if (!(await confirmDialog('現在のグループ分けをチャンネルへ投稿します。', { okLabel: '投稿する' }))) return;
+        try {
+          const r = await api('/occurrences/' + groupingState.occUuid + '/grouping/announce', { method: 'POST' });
+          toast(r && r.ok ? '投稿しました' : '投稿に失敗しました', !(r && r.ok));
+        } catch (e) { toast(e.message, true); }
       }
 
       // ================= メンバー区分 =================
@@ -1438,9 +2114,9 @@
               ? `<span class="pill on">ロール管理</span> <span class="pill">${esc(s.mention_role_id)}</span>`
               : '<span class="pill off">手動管理</span>'}</div></div>
           <div class="actions">
-            <button class="btn sm secondary" data-smembers="${s.id}">メンバー</button>
-            <button class="btn sm ghost" data-sedit="${s.id}">編集</button>
-            <button class="btn sm danger" data-sdel="${s.id}">削除</button>
+            <button class="btn sm secondary" data-smembers="${esc(s.uuid)}">メンバー</button>
+            <button class="btn sm ghost" data-sedit="${esc(s.uuid)}">編集</button>
+            <button class="btn sm danger" data-sdel="${esc(s.uuid)}">削除</button>
           </div></div>`).join('');
         $('#sec-segments').innerHTML = `<div class="sec-head"><h2>メンバー区分 (${segs.length})</h2>
             <button class="btn" id="segNewBtn">＋ 新規区分</button></div>
@@ -1459,20 +2135,14 @@
               <button class="btn ghost" type="button" id="segCancel">キャンセル</button>
               <button class="btn" id="segSave">保存</button>
             </div>
-          </dialog>
-          <dialog class="modal-lg" id="segMembersDialog" aria-labelledby="segMembersTitle">
-            <div class="modal-head"><h3 id="segMembersTitle">区分メンバー</h3>
-              <button type="button" class="modal-close" data-segm-close aria-label="閉じる">✕</button></div>
-            <div class="modal-body" id="segMembersBox"></div>
-            <div class="modal-foot"><button type="button" class="btn ghost" data-segm-close>閉じる</button></div>
           </dialog>`;
         $('#segSave').onclick = (e) => withBusy(e.currentTarget, saveSegment);
         $('#segNewBtn') && ($('#segNewBtn').onclick = () => { resetSegForm(); $('#segDialog').showModal(); $('#segName').focus(); });
         $('#segClose').onclick = () => $('#segDialog').close();
         $('#segCancel').onclick = () => $('#segDialog').close();
-        document.querySelectorAll('#segMembersDialog [data-segm-close]').forEach((b) => { b.onclick = () => $('#segMembersDialog').close(); });
-        document.querySelectorAll('[data-sedit]').forEach((b) => { b.onclick = () => { fillSegForm(segs.find((s) => s.id === Number(b.dataset.sedit))); $('#segDialog').showModal(); }; });
-        document.querySelectorAll('[data-smembers]').forEach((b) => { b.onclick = () => loadSegmentMembers(Number(b.dataset.smembers)); });
+        document.querySelectorAll('#segMembersDialog [data-segm-close]').forEach((b) => { b.onclick = (e) => { e.preventDefault(); closeSegMembersPage(); }; });
+        document.querySelectorAll('[data-sedit]').forEach((b) => { b.onclick = () => { fillSegForm(segs.find((s) => s.uuid === b.dataset.sedit)); $('#segDialog').showModal(); }; });
+        document.querySelectorAll('[data-smembers]').forEach((b) => { b.onclick = () => navigate('segments/' + b.dataset.smembers + '/members'); });
         document.querySelectorAll('[data-sdel]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この区分を削除します。', { danger: true, okLabel: '削除' }))) return;
@@ -1487,16 +2157,16 @@
       }
       function fillSegForm(s) {
         if (!s) return;
-        $('#segId').value = s.id; $('#segName').value = s.name; $('#segRole').value = s.mention_role_id || '';
-        $('#segFormTitle').textContent = '編集 (ID: ' + s.id + ')';
+        $('#segId').value = s.uuid; $('#segName').value = s.name; $('#segRole').value = s.mention_role_id || '';
+        $('#segFormTitle').textContent = '編集';
       }
       async function saveSegment() {
         const name = $('#segName').value.trim();
         if (!name) return toast('名前は必須です', true);
         const mention_role_id = $('#segRole').value.trim() || null;
-        const id = $('#segId').value;
+        const uuid = $('#segId').value;
         try {
-          if (id) { await api('/segments/' + id, { method: 'PUT', body: JSON.stringify({ name, mention_role_id }) }); toast('更新しました'); }
+          if (uuid) { await api('/segments/' + uuid, { method: 'PUT', body: JSON.stringify({ name, mention_role_id }) }); toast('更新しました'); }
           else { await api('/segments', { method: 'POST', body: JSON.stringify({ guild_id: guild.id, name, mention_role_id }) }); toast('作成しました'); }
           try { $('#segDialog').close(); } catch (_) {}
           loadSegments();
@@ -1505,16 +2175,15 @@
 
       // ----- 区分メンバー（手動ピッカー / ロール同期・ADR 0009） -----
       let cacheGuildMembers = null;
-      async function loadSegmentMembers(segmentId) {
-        const seg = cacheSegments.find((s) => s.id === segmentId);
+      async function loadSegmentMembers(segUuid) {
+        const seg = cacheSegments.find((s) => s.uuid === segUuid);
         const roleManaged = !!(seg && seg.mention_role_id);
         const isEveryone = !!(seg && seg.mention_role_id === '@everyone');
         let list = [];
-        try { list = await api('/segments/' + segmentId + '/members'); } catch (e) { return toast(e.message, true); }
+        try { list = await api('/segments/' + segUuid + '/members'); } catch (e) { return toast(e.message, true); }
         const rows = list.map((m) => {
           const paused = m.status === '休止中';
           const name = m.display_name || m.user_name || m.user_id;
-          // ロール管理区分は手動「外す」を出さない（同期が支配）。休止/再開は可。
           const delBtn = roleManaged ? '' : `<button class="btn sm danger" data-smdel="${esc(m.user_id)}">外す</button>`;
           return `<div class="pickrow">
             <div>${esc(name)} <span class="muted" style="font-size:12px">${esc(m.user_id)}</span>
@@ -1536,26 +2205,25 @@
           : `<h3 style="margin-top:14px">メンバーを追加</h3>
              <div class="search"><input id="memSearch" placeholder="サーバー参加者を検索（User ID 入力は不要）" /></div>
              <div id="memPicker" style="margin-top:8px"><p class="muted">読み込み中…</p></div>`;
-        $('#segMembersTitle').textContent = `区分メンバー: ${seg ? seg.name : segmentId} (${list.length})`;
+        $('#segMembersTitle').textContent = `区分メンバー: ${seg ? seg.name : segUuid} (${list.length})`;
         $('#segMembersBox').innerHTML = `${list.length ? rows : '<div class="empty">' + emptyMsg + '</div>'}
           ${panel}`;
-        const _smd = $('#segMembersDialog'); if (_smd && !_smd.open) _smd.showModal();
+        openAsPage($('#segMembersDialog'));
         document.querySelectorAll('[data-smtoggle]').forEach((b) => {
           b.onclick = async () => {
-            try { await api('/segments/' + segmentId + '/members/' + encodeURIComponent(b.dataset.smtoggle),
+            try { await api('/segments/' + segUuid + '/members/' + encodeURIComponent(b.dataset.smtoggle),
               { method: 'PUT', body: JSON.stringify({ status: b.dataset.status }) });
-              toast('更新しました'); loadSegmentMembers(segmentId); } catch (e) { toast(e.message, true); }
+              toast('更新しました'); loadSegmentMembers(segUuid); } catch (e) { toast(e.message, true); }
           };
         });
         document.querySelectorAll('[data-smdel]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('このメンバーを区分から外します。', { danger: true, okLabel: '外す' }))) return;
-            try { await api('/segments/' + segmentId + '/members/' + encodeURIComponent(b.dataset.smdel), { method: 'DELETE' });
-              toast('外しました'); loadSegmentMembers(segmentId); } catch (e) { toast(e.message, true); }
+            try { await api('/segments/' + segUuid + '/members/' + encodeURIComponent(b.dataset.smdel), { method: 'DELETE' });
+              toast('外しました'); loadSegmentMembers(segUuid); } catch (e) { toast(e.message, true); }
           };
         });
 
-        // ロール管理区分: 手動同期ボタン（破壊的確認つき）。ピッカーは出さない。
         if (roleManaged) {
           $('#segSyncBtn').onclick = (e) => withBusy(e.currentTarget, async () => {
             const warn = isEveryone
@@ -1563,16 +2231,15 @@
               : 'Discord ロールからメンバーを同期します。ロール非保有の現メンバーは区分から外れます。';
             if (!(await confirmDialog(warn, { okLabel: '同期する', danger: true }))) return;
             try {
-              const r = await api('/segments/' + segmentId + '/sync-from-role', { method: 'POST' });
+              const r = await api('/segments/' + segUuid + '/sync-from-role', { method: 'POST' });
               toast(r && r.message ? r.message : '同期しました');
               try { cacheSegments = await api('/segments?guild_id=' + encodeURIComponent(guild.id)); } catch (_) {}
-              loadSegmentMembers(segmentId);
+              loadSegmentMembers(segUuid);
             } catch (e) { toast(e.message, true); }
           });
           return;
         }
 
-        // メンバーピッカー（手動区分のみ・サーバー在籍をライブ取得）
         const already = new Set(list.map((m) => m.user_id));
         if (!cacheGuildMembers) {
           try { cacheGuildMembers = await api('/guilds/' + guild.id + '/members'); }
@@ -1593,9 +2260,9 @@
             b.onclick = async () => {
               const m = cacheGuildMembers.find((x) => x.user_id === b.dataset.add);
               try {
-                await api('/segments/' + segmentId + '/members', { method: 'POST',
+                await api('/segments/' + segUuid + '/members', { method: 'POST',
                   body: JSON.stringify({ user_id: m.user_id, user_name: m.user_name, display_name: m.display_name }) });
-                toast('追加しました'); loadSegmentMembers(segmentId);
+                toast('追加しました'); loadSegmentMembers(segUuid);
               } catch (e) { toast(e.message, true); }
             };
           });
@@ -1616,7 +2283,7 @@
           return;
         }
         window.EventBotTable.mount($('#recordsTable'), {
-          searchPlaceholder: '回答を全体検索',
+          search: false,
           columns: [
             { id: 'when', header: '開催日時', accessor: (r) => `${r.occurrence_date || ''}${r.occurrence_time ? ' ' + r.occurrence_time : ''}` },
             { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },
@@ -1642,13 +2309,16 @@
           return;
         }
         window.EventBotTable.mount($('#sendlogTable'), {
-          searchPlaceholder: '送信履歴を全体検索',
+          search: false,
           columns: [
             { id: 'date', header: '送信日', accessor: (r) => r.send_date || '' },
             { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },
             { id: 'occ', header: '開催日', accessor: (r) => r.occurrence_date || '' },
             { id: 'kind', header: '種別', accessor: (r) => kindLabel[r.kind] || r.kind },
-            { id: 'to', header: '宛先', accessor: (r) => r.user_id || '（チャンネル）' },
+            { id: 'to', header: '宛先', accessor: (r) => r.user_name || r.user_id || '（チャンネル）',
+              render: (v, r) => !r.user_id ? '<span class="muted">（チャンネル）</span>'
+                : r.user_name ? `${esc(r.user_name)} <span class="muted" style="font-size:11px">${esc(r.user_id)}</span>`
+                : esc(r.user_id) },
             { id: 'status', header: '結果', accessor: (r) => r.status,
               render: (v) => v === 'sent' ? '<span class="pill on">送信</span>' : v === 'failed' ? '<span class="pill" style="color:var(--danger);border-color:var(--danger)">失敗</span>' : `<span class="pill">${esc(v)}</span>` },
             { id: 'error', header: '詳細', accessor: (r) => r.error || '', render: (v) => v ? `<span class="muted">${esc(v)}</span>` : '' },
@@ -1728,8 +2398,20 @@
       function boot() {
         if (!token) return showGate();
         const saved = localStorage.getItem(GUILD_KEY);
-        const hash = (location.hash || '').replace('#', '');
-        if (saved) { try { const g = JSON.parse(saved); if (!hash || hash === g.id) { guild = g; return showWorkspace(); } } catch (_) {} }
+        // 新形式 `g/<gid>/...`、旧形式 `<gid>`、空のいずれも許容（旧→新は自動補正）
+        const { guildId } = parseHash();
+        if (saved) {
+          try {
+            const g = JSON.parse(saved);
+            if (!guildId || guildId === g.id) {
+              guild = g;
+              showWorkspace();
+              // 初期ハッシュが `g/<gid>/...` 形式ならルータでモーダル復帰、なければ何もしない
+              handleHashRoute();
+              return;
+            }
+          } catch (_) {}
+        }
         showPicker();
       }
       boot();

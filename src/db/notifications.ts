@@ -1,10 +1,11 @@
 import type { MentionMode, Notification, NotificationListItem, NotificationType } from './types';
 import { listOccurrencesForNotification, setOccurrenceStatus } from './occurrences';
+import { newUuid } from './uuid';
 
 const COLS =
-  'id, guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time, ' +
+  'id, uuid, guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time, ' +
   'duration_minutes, recruit_days_before, remind_start_days, remind_undecided_days, ' +
-  'quota_enabled, quota_interval_days, assignment_enabled, mention_enabled, mention_mode, ' +
+  'quota_enabled, quota_interval_days, assignment_enabled, grouping_enabled, mention_enabled, mention_mode, ' +
   'requires_response, message_title, message_body, active, ' +
   'response_deadline_hours, change_alert_channel_id, send_hour, ' +
   'decided_occurrence_id, created_at';
@@ -33,6 +34,8 @@ export interface NotificationInput {
   quota_enabled: number;
   quota_interval_days: number | null;
   assignment_enabled: number;
+  /** グループ分け機能を有効にするか（ADR 0015） */
+  grouping_enabled: number;
   mention_mode: MentionMode;
   requires_response: number;
   message_title: string;
@@ -74,6 +77,18 @@ export async function getNotification(
   return row ?? null;
 }
 
+/** UUID で Notification を取得（未登録なら null・ADR 0016） */
+export async function getNotificationByUuid(
+  db: D1Database,
+  uuid: string,
+): Promise<Notification | null> {
+  const row = await db
+    .prepare(`SELECT ${COLS} FROM notifications WHERE uuid = ?`)
+    .bind(uuid)
+    .first<Notification>();
+  return row ?? null;
+}
+
 /** チャンネルに紐づく active な Notification 一覧 */
 export async function listNotificationsByChannel(
   db: D1Database,
@@ -103,17 +118,19 @@ export async function createNotification(
   db: D1Database,
   input: NotificationInput,
 ): Promise<Notification> {
+  const uuid = newUuid();
   const res = await db
     .prepare(
       `INSERT INTO notifications (
-         guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time,
+         uuid, guild_id, segment_id, name, channel_id, type, rrule, one_off_date, anchor_date, start_time,
          duration_minutes, recruit_days_before, remind_start_days, remind_undecided_days,
-         quota_enabled, quota_interval_days, assignment_enabled, mention_mode, requires_response,
+         quota_enabled, quota_interval_days, assignment_enabled, grouping_enabled, mention_mode, requires_response,
          message_title, message_body, active,
          response_deadline_hours, change_alert_channel_id, send_hour
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
+      uuid,
       input.guild_id,
       input.segment_id,
       input.name,
@@ -130,6 +147,7 @@ export async function createNotification(
       input.quota_enabled,
       input.quota_interval_days ?? null,
       input.assignment_enabled,
+      input.grouping_enabled,
       input.mention_mode,
       input.requires_response,
       input.message_title,
@@ -147,6 +165,7 @@ export async function createNotification(
   return (
     row ?? {
       id,
+      uuid,
       created_at: '',
       decided_occurrence_id: null,
       mention_enabled: input.mention_mode === 'role' ? 1 : 0,
@@ -168,7 +187,7 @@ export async function updateNotification(
          one_off_date = ?, anchor_date = ?, start_time = ?, duration_minutes = ?,
          recruit_days_before = ?, remind_start_days = ?,
          remind_undecided_days = ?, quota_enabled = ?, quota_interval_days = ?,
-         assignment_enabled = ?, mention_mode = ?, requires_response = ?,
+         assignment_enabled = ?, grouping_enabled = ?, mention_mode = ?, requires_response = ?,
          message_title = ?, message_body = ?, active = ?,
          response_deadline_hours = ?, change_alert_channel_id = ?, send_hour = ?
        WHERE id = ?`,
@@ -190,6 +209,7 @@ export async function updateNotification(
       patch.quota_enabled,
       patch.quota_interval_days ?? null,
       patch.assignment_enabled,
+      patch.grouping_enabled,
       patch.mention_mode,
       patch.requires_response,
       patch.message_title,
@@ -252,7 +272,7 @@ export async function undecideNotification(
 }
 
 /**
- * Notification 削除。配下 occurrences と、その responses / assignments も削除する。
+ * Notification 削除。配下 occurrences と、その responses / assignments / groupings も削除する。
  * 削除した場合 true。
  */
 export async function deleteNotification(db: D1Database, id: number): Promise<boolean> {
@@ -272,6 +292,37 @@ export async function deleteNotification(db: D1Database, id: number): Promise<bo
     )
     .bind(id)
     .run();
+  // グループ分け関連のカスケード削除（ADR 0015）
+  await db
+    .prepare(
+      `DELETE FROM group_members WHERE group_id IN (
+         SELECT g.id FROM groups g
+         JOIN groupings gp ON gp.id = g.grouping_id
+         JOIN occurrences o ON o.id = gp.occurrence_id
+         WHERE o.notification_id = ?
+       )`,
+    )
+    .bind(id)
+    .run();
+  await db
+    .prepare(
+      `DELETE FROM groups WHERE grouping_id IN (
+         SELECT gp.id FROM groupings gp
+         JOIN occurrences o ON o.id = gp.occurrence_id
+         WHERE o.notification_id = ?
+       )`,
+    )
+    .bind(id)
+    .run();
+  await db
+    .prepare(
+      `DELETE FROM groupings WHERE occurrence_id IN (
+         SELECT id FROM occurrences WHERE notification_id = ?
+       )`,
+    )
+    .bind(id)
+    .run();
+  await db.prepare('DELETE FROM grouping_constraints WHERE notification_id = ?').bind(id).run();
   await db.prepare('DELETE FROM occurrences WHERE notification_id = ?').bind(id).run();
 
   const res = await db.prepare('DELETE FROM notifications WHERE id = ?').bind(id).run();

@@ -27,6 +27,8 @@ export interface MountOpts {
   rows: Record<string, unknown>[];
   pageSize?: number;
   searchPlaceholder?: string;
+  /** グローバル全体検索ボックスの表示。既定 true。false で非表示（列ごとの絞り込み・ソートは残る）。 */
+  search?: boolean;
 }
 
 function esc(s: unknown): string {
@@ -128,9 +130,13 @@ function mount(container: HTMLElement, opts: MountOpts): void {
       })
       .join('');
 
+    const searchBox =
+      opts.search === false
+        ? ''
+        : `<input class="ebt-global" value="${esc(state.globalFilter || '')}" placeholder="${esc(opts.searchPlaceholder || '全体を検索')}" style="max-width:280px" />`;
     container.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-        <input class="ebt-global" value="${esc(state.globalFilter || '')}" placeholder="${esc(opts.searchPlaceholder || '全体を検索')}" style="max-width:280px" />
+      <div style="display:flex;justify-content:${opts.search === false ? 'flex-end' : 'space-between'};align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        ${searchBox}
         <div class="muted" style="font-size:12px">${rowModel.rows.length} 件</div>
       </div>
       <div class="table-wrap">
@@ -147,14 +153,36 @@ function mount(container: HTMLElement, opts: MountOpts): void {
 
     const q = <T extends Element>(sel: string) => container.querySelector(sel) as T | null;
 
+    // IME（日本語入力など）対策: 反映は setState→render で input を作り直すため、変換中
+    // (composition 中) に走らせると変換が壊れて子音が生のローマ字で残る。変換中は保留し、
+    // 確定（compositionend）後にまとめて反映する。英数字など非変換入力は従来どおり即時反映。
+    let composing = false;
+
     const global = q<HTMLInputElement>('.ebt-global');
     if (global) {
-      global.oninput = () =>
-        setState({ globalFilter: global.value, pagination: { ...state.pagination, pageIndex: 0 } });
+      const applyGlobal = () => {
+        const val = global.value;
+        setState({ globalFilter: val, pagination: { ...state.pagination, pageIndex: 0 } });
+        const again = q<HTMLInputElement>('.ebt-global');
+        if (again) {
+          again.focus();
+          again.setSelectionRange(val.length, val.length);
+        }
+      };
+      global.addEventListener('compositionstart', () => {
+        composing = true;
+      });
+      global.addEventListener('compositionend', () => {
+        composing = false;
+        applyGlobal();
+      });
+      global.oninput = () => {
+        if (!composing) applyGlobal();
+      };
     }
 
     container.querySelectorAll<HTMLInputElement>('.ebt-filter').forEach((inp) => {
-      inp.oninput = () => {
+      const applyFilter = () => {
         const col = inp.dataset.col as string;
         const val = inp.value;
         const others = state.columnFilters.filter((f) => f.id !== col);
@@ -165,6 +193,16 @@ function mount(container: HTMLElement, opts: MountOpts): void {
           again.focus();
           again.setSelectionRange(val.length, val.length);
         }
+      };
+      inp.addEventListener('compositionstart', () => {
+        composing = true;
+      });
+      inp.addEventListener('compositionend', () => {
+        composing = false;
+        applyFilter();
+      });
+      inp.oninput = () => {
+        if (!composing) applyFilter();
       };
     });
 

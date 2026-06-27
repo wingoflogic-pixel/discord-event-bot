@@ -8,6 +8,7 @@ import type { Segment } from '../src/db/types';
 /** mention_role_id だけ差し替えた最小 Segment */
 const seg = (role: string | null): Segment => ({
   id: 1,
+  uuid: '00000000-0000-0000-0000-000000000001',
   guild_id: 'g1',
   name: 's',
   mention_role_id: role,
@@ -93,6 +94,7 @@ describe('notifications 新カラムの往復（migration 0009・ADR 0010）', (
       quota_enabled: 0,
       quota_interval_days: null,
       assignment_enabled: 0,
+      grouping_enabled: 0,
       mention_mode: 'members',
       requires_response: 0,
       message_title: '見出しX',

@@ -7,6 +7,8 @@
 /** segments: 設定可能なメンバー区分（キャスト/スタッフ等） */
 export interface Segment {
   id: number;
+  /** URL／API 表面用の UUID（ADR 0016）。内部結合は id を使う */
+  uuid: string;
   guild_id: string;
   name: string;
   /** @メンション用 Discord ロールID / '@everyone' / null。設定時は「ロール管理区分」のメンバー源も兼ねる（ADR 0009） */
@@ -53,6 +55,8 @@ export type MentionMode = 'none' | 'role' | 'members';
 /** notifications: Server(guild_id) 配下の独立トラック */
 export interface Notification {
   id: number;
+  /** URL／API 表面用の UUID（ADR 0016）。内部結合は id を使う */
+  uuid: string;
   guild_id: string;
   segment_id: number;
   name: string;
@@ -82,6 +86,8 @@ export interface Notification {
   quota_interval_days: number | null;
   /** 0/1 */
   assignment_enabled: number;
+  /** 0/1 グループ分け機能を有効にするか（ADR 0015） */
+  grouping_enabled: number;
   /**
    * @deprecated mention_mode へ移行（ADR 0010）。列は後方互換で残すが本体は参照しない。
    * 0/1 対象 Segment の Discord ロールへ @メンションするか
@@ -135,6 +141,8 @@ export type OccurrenceStatus = 'scheduled' | 'cancelled';
 /** occurrences: Notification の 1 開催回（単発の複数候補では「日付＋時刻」のスロット1つ） */
 export interface Occurrence {
   id: number;
+  /** URL／API 表面用の UUID（ADR 0016）。内部結合は id を使う */
+  uuid: string;
   notification_id: number;
   /** 'YYYY/MM/DD'（JST・ゼロ埋めで辞書順=時系列順） */
   occurrence_date: string;
@@ -216,5 +224,81 @@ export interface SendLog {
 /** リマインド送信履歴の一覧表示用（send_log に通知名/開催日を合成・admin 閲覧用） */
 export interface SendLogListItem extends SendLog {
   notification_name: string;
+  /** 宛先の表示名（display_name > user_name）。members に無ければ null（UI は user_id 表示にフォールバック） */
+  user_name: string | null;
   occurrence_date: string | null;
+}
+
+/**
+ * グループ分け（Grouping）関連の型（ADR 0015）。
+ * Occurrence 単位で 1 つ作成し、参加者を group_count 個の Group に分割する。
+ */
+
+/** ペア制約の方向 */
+export type ConstraintDirection = 'together' | 'apart';
+/** ペア制約の強度 */
+export type ConstraintStrength = 'required' | 'preferred';
+
+/** groupings: 1 Occurrence あたり 1 つ */
+export interface Grouping {
+  id: number;
+  /** URL／API 表面用の UUID（ADR 0016） */
+  uuid: string;
+  occurrence_id: number;
+  group_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** groups: グループ実体（表示順と名前を持つ） */
+export interface Group {
+  id: number;
+  /** URL／API 表面用の UUID（ADR 0016） */
+  uuid: string;
+  grouping_id: number;
+  group_index: number;
+  name: string;
+}
+
+/** group_members: グループへのメンバー所属 */
+export interface GroupMember {
+  group_id: number;
+  user_id: string;
+}
+
+/** grouping_constraints: Notification 単位のペア制約 */
+export interface GroupingConstraint {
+  id: number;
+  /** URL／API 表面用の UUID（ADR 0016） */
+  uuid: string;
+  notification_id: number;
+  /** ペアは a < b で正規化して保存 */
+  user_id_a: string;
+  user_id_b: string;
+  direction: ConstraintDirection;
+  strength: ConstraintStrength;
+  created_at: string;
+}
+
+/** API 応答用: Group + メンバー一覧（表示名付き） */
+export interface GroupWithMembers {
+  id: number;
+  group_index: number;
+  name: string;
+  members: { user_id: string; name: string }[];
+}
+
+/** API 応答用: Grouping の全体ビュー */
+export interface GroupingView {
+  grouping: Grouping | null;
+  groups: GroupWithMembers[];
+  /** 未割り当ての参加者（プール） */
+  pool: { user_id: string; name: string }[];
+  /** 保存後に「不参加」に変わった or 既存メンバーで未割り当てだが現在も「参加」のメンバー差分情報 */
+  diff: {
+    /** グループに入っているが現在は参加していないメンバー（保存時 vs 現在） */
+    no_longer_participating: { user_id: string; name: string; group_id: number }[];
+    /** 現在「参加」だがどのグループにも入っていない新規参加者 */
+    newly_participating: { user_id: string; name: string }[];
+  };
 }
