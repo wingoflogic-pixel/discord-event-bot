@@ -713,10 +713,9 @@
         guild = g;
         localStorage.setItem(GUILD_KEY, JSON.stringify(g));
         // ハッシュは `g/<guildId>` 形式（ADR 0016）。サーバー切替時は子ページパスをリセット。
-        suppressHashHandle = true;
-        location.hash = 'g/' + g.id;
-        setTimeout(() => { suppressHashHandle = false; }, 0);
+        // showWorkspace を先に呼び、workspace 起動後に hashchange が handleHashRoute を駆動する。
         showWorkspace();
+        location.hash = 'g/' + g.id;
       }
 
       // ================= ハッシュルータ（ADR 0016）=================
@@ -728,7 +727,6 @@
       //   #g/<gid>/segments/<suuid>/members           → 区分メンバー
       //   #g/<gid>/notifications/<nuuid>/occurrences/<ouuid>/grouping → グループ分け
       // モーダル DOM は維持し、URL ↔ open/close を双方向に同期する（リロード復帰可・ブラウザバック対応）。
-      let suppressHashHandle = false;
       function parseHash() {
         const raw = (location.hash || '').replace(/^#/, '');
         const parts = raw.split('/').filter(Boolean);
@@ -741,22 +739,18 @@
       function navigate(subpath) {
         if (!guild) return;
         const base = 'g/' + guild.id;
-        const next = subpath ? base + '/' + subpath : base;
-        suppressHashHandle = true;
-        location.hash = next;
-        setTimeout(() => { suppressHashHandle = false; }, 0);
-        handleHashRoute();
+        const next = '#' + (subpath ? base + '/' + subpath : base);
+        // ハッシュ更新 → hashchange イベントが handleHashRoute を駆動する（単一経路）。
+        // 既に同じハッシュなら hashchange が発火しないので直接処理する。
+        if (location.hash === next) handleHashRoute();
+        else location.hash = next;
       }
       /** どのフォームに dirty があるか集約 */
       function anyDirty() { return formDirty || groupingState.dirty; }
       /** ハッシュ→画面状態を同期。子ページ部はモーダル開閉で表現する。 */
       async function handleHashRoute() {
-        if (suppressHashHandle) return;
         const { guildId, rest } = parseHash();
         if (!guildId || !guild || guild.id !== guildId) return; // workspace 未起動 / 別サーバー切替は別経路
-        // dirty なフォームが開いていて、ハッシュが「閉じる方向」なら確認
-        const closing = rest.length === 0
-          || (rest[0] === 'segments' && !$('#segMembersDialog')?.open && false) /* placeholder */;
         // 子ページパスからモーダル状態を決定
         const want = (() => {
           if (rest.length === 0) return { kind: 'list' };
