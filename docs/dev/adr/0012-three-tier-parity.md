@@ -60,3 +60,32 @@
 - 旧「staging を main へマージしない」ルールは廃止。unified 化により main↔staging を正式マージできるため、通常の GitHub フローに戻った。
 
 **事故ポイント（要厳守）**: staging プロジェクトの Deploy command が誤って素の `npm run deploy` のままだと、base = 本番 Worker を狙うため staging push が **本番にデプロイされる**。Workers Builds 側の設定が唯一のガード。
+
+## 追補 — model A 採用: main 一本化＋本番は手動デプロイ（2026-06-27）
+
+unified 化（前項）に続き、**ブランチ構成も main 一本に統一**し、**本番デプロイは Workers Builds から外して手動 `npm run deploy:cli` に一本化**する運用に移行した。
+
+**動機**
+
+- unified 化により main↔staging に「意味のある」wrangler 差分は無くなった。残るのは「コードの進度差」のみで、2 ブランチを並走させるメリットが薄れた。
+- 1 人運用において、「staging に push して検証 → main にマージして本番デプロイ」のフローは「main にマージしたら自動的に本番に出る」緊張を毎回伴う。明示的なリリース操作のほうが認知負荷が小さく事故も起きにくい。
+- Workers Builds の制約上「同じ main ブランチに 2 つのプロジェクトを接続して片方だけ自動／片方だけ手動」を綺麗に分けるには本番側の Builds を切るしかない。むしろそれを明文化する。
+
+**新運用（model A）**
+
+- ブランチ = **`main` 一本（と feature 枝）**。
+- **②staging（Worker `discord-event-bot-staging`）= main の auto-deploy**: Workers Builds の staging プロジェクトの Production branch を `main`、Deploy command を `npm run deploy:staging` に設定。main への push で自動更新される。
+- **③本番（Worker `discord-event-bot`）= 保守者の手動 `npm run deploy:cli`**: 本番 Workers Builds プロジェクトは **「Builds disabled」**（auto-deploy 無効）。リリース時は保守者が事前許可を取り `npm run deploy:cli` を実行（本番 D1 マイグレ → 本番 Worker デプロイ）。
+- 旧 `staging` ブランチは廃止（コミット履歴は main に統合済み）。
+- `deploy:cli` は ADR0012 本文では「Workers Builds 安定後に撤去」と書かれていたが、model A 移行により**本番運用の主経路として維持**する（撤去計画は取り消し）。
+
+**意義**
+
+- 「main は本番」という誤解と「staging を main にマージしないと反映されない」という追加手間の両方が解消される。
+- main push が本番に到達しないため、開発の心理的安全性が上がる（実験的なマージも staging で観察できる）。
+- 本番リリースが「意識的な単一コマンド」になり、リリース時刻・内容が `git tag` と CLI 履歴に明確に残る。
+
+**事故ポイント（要厳守）**
+
+- 本番 Workers Builds プロジェクトの **Builds が誤って有効に戻ると、main push が本番に飛ぶ**。dashboard 状態は折に触れ確認すること。
+- staging プロジェクトの Production branch が `main` 以外（旧 `staging` のままなど）だと検証がトリガーされない。設定は staging=`main` を保つこと。
