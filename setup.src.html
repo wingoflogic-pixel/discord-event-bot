@@ -485,8 +485,8 @@
           <li>左メニュー <b>「⚙️ セットアップ」</b> を開き、シークレットがすべて「設定済み」か確認。</li>
           <li><b>「コマンドを登録」ボタン</b>を押す。下記の 3 つが Discord で使えるようになります:
             <ul>
-              <li><span class="pill">/recruit</span>（管理者用）— 募集メッセージをそのチャンネルに今すぐ送信</li>
-              <li><span class="pill">/help</span>（誰でも）— コマンド一覧と管理画面 URL を表示</li>
+              <li><span class="pill">/notify</span>（管理者用）— 通知を選んで募集メッセージを今すぐ送信</li>
+              <li><span class="pill">/help</span>（誰でも）— Bot の使い方ガイドを表示</li>
               <li><span class="pill">/manage</span>（管理者用）— 管理画面の URL を表示</li>
             </ul>
           </li>
@@ -624,7 +624,7 @@
       </summary>
       <div class="body">
         <ul>
-          <li><b>スラッシュコマンド（/recruit /help /manage）が Discord に出てこない</b><br>手順4「コマンドを登録」を実行したか／手順5 の Interaction Endpoint URL を保存したか。</li>
+          <li><b>スラッシュコマンド（/notify /help /manage）が Discord に出てこない</b><br>手順4「コマンドを登録」を実行したか／手順5 の Interaction Endpoint URL を保存したか。</li>
           <li><b>Discord で「インタラクション・エンドポイントURL」の保存時に「The specified interactions endpoint url could not be verified」エラー</b><br>Cloudflare 側の <span class="pill">DISCORD_PUBLIC_KEY</span> が未設定 or 誤りです。手順1② の<b>公開キー</b>を Cloudflare の <b>Settings → Variables and secrets</b> で正しく設定し直してください（保存すれば数秒で反映）。その後、Discord 側でもう一度<b>「変更を保存する」</b>を押します。<b>それでも直らないとき</b>だけ、Worker を再デプロイ（<b>Deployments</b> タブから Retry）。</li>
           <li><b>Discord で「Private application cannot have a default authorization link」エラー（PUBLIC BOT を OFF にできない）</b><br>Discord Developer Portal → <span class="where">左メニュー 概要<span class="arr">▸</span>インストール</span> → <b>「インストールリンク」</b> を <b>「なし」</b> に変更（手順1④）。</li>
           <li><b>「サーバーが取得できません」と出る</b><br>Bot をサーバーに招待したか（手順1）／<span class="pill">DISCORD_BOT_TOKEN</span> が正しいか。</li>

@@ -1,7 +1,7 @@
 [
   {
-    "name": "recruit",
-    "description": "募集メッセージを送信します (管理者用)",
+    "name": "notify",
+    "description": "通知を選んで募集メッセージを今すぐ送信します (管理者用)",
     "default_member_permissions": "8"
   },
   {

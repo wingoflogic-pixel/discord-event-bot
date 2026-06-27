@@ -1,6 +1,5 @@
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
 import type { Env } from '../env';
-import type { Notification } from '../db/types';
 import { ensureMember, updateMemberDisplayName } from '../db/members';
 import { getNotification, listNotificationsByChannel } from '../db/notifications';
 import { getOccurrence, listScheduledOccurrences } from '../db/occurrences';
@@ -43,7 +42,7 @@ interface DiscordInteraction {
 
 type InteractionResponse = {
   type: number;
-  data?: { content: string; flags?: number };
+  data?: { content: string; flags?: number; components?: unknown[] };
 };
 
 function ephemeral(content: string): InteractionResponse {
@@ -112,11 +111,11 @@ async function handleCommand(
 
   try {
     switch (name) {
-      case 'recruit':
-        return await handleRecruit(interaction, env);
+      case 'notify':
+        return await handleNotify(interaction, env);
 
       case 'help':
-        return handleHelp(origin);
+        return handleHelp();
 
       case 'manage':
         return handleManage(origin);
@@ -130,52 +129,117 @@ async function handleCommand(
   }
 }
 
-/** チャンネルから Notification を解決（1チャンネル1通知前提） */
-async function resolveNotification(
-  db: D1Database,
-  interaction: DiscordInteraction,
-): Promise<Notification | InteractionResponse> {
-  const channelId = interaction.channel_id;
-  if (!channelId) return ephemeral('❌ チャンネルを特定できません。');
-  const list = await listNotificationsByChannel(db, channelId);
-  if (list.length === 0) return ephemeral('❌ このチャンネルに紐づく通知がありません。');
-  if (list.length > 1) return ephemeral('❌ このチャンネルに複数の通知が紐づいています。管理UIで整理してください。');
-  return list[0];
+/** Discord ボタン label の上限(80字)に合わせて長い通知名を省略する。 */
+function truncateLabel(s: string, max = 80): string {
+  return s.length <= max ? s : s.slice(0, max - 1) + '…';
 }
 
-function isEphemeralResponse(v: unknown): v is InteractionResponse {
-  // InteractionResponse.type は数値（InteractionResponseType）。Notification.type は
-  // 'recurring'|'oneoff' の文字列なので、両者とも 'type' を持つ。数値型で確実に弁別する。
-  return typeof v === 'object' && v !== null && typeof (v as { type?: unknown }).type === 'number';
-}
-
-/** /recruit — チャンネルの Notification を解決し、単発・複数候補日にも対応して募集投稿 */
-async function handleRecruit(
+/**
+ * /notify — チャンネルに紐づく Notification を一覧化して ephemeral でボタン提示する。
+ * ボタン押下時は handleButton の 'notifypick' 分岐で recruitNotificationNow を実行する。
+ * 1件のときも統一して 1 ボタン出すことで、誤爆防止のクッションを兼ねる。
+ */
+async function handleNotify(
   interaction: DiscordInteraction,
   env: Env,
 ): Promise<InteractionResponse> {
-  const resolved = await resolveNotification(env.DB, interaction);
-  if (isEphemeralResponse(resolved)) return resolved;
-  const r = await recruitNotificationNow(env, resolved);
-  return ephemeral((r.ok ? '✅ ' : '❌ ') + r.message);
+  const channelId = interaction.channel_id;
+  if (!channelId) return ephemeral('❌ チャンネルを特定できません。');
+  const list = await listNotificationsByChannel(env.DB, channelId);
+  if (list.length === 0) {
+    return ephemeral('❌ このチャンネルに紐づく通知がありません。管理画面で作成してください。');
+  }
+  // Discord ボタン上限 5行 × 5個 = 25 件まで。超過分は省略表示する。
+  const limit = 25;
+  const shown = list.slice(0, limit);
+  const omitted = list.length - shown.length;
+  const rows: unknown[] = [];
+  for (let i = 0; i < shown.length; i += 5) {
+    rows.push({
+      type: 1,
+      components: shown.slice(i, i + 5).map((n) => ({
+        type: 2,
+        style: 2, // secondary (灰) — 即送信のため目立たせない誤爆対策
+        label: truncateLabel(n.name),
+        custom_id: `notifypick_${n.id}`,
+      })),
+    });
+  }
+  const note =
+    omitted > 0 ? `\n…ほか ${omitted} 件は表示上限のため省略しています。` : '';
+  return {
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      content: `📨 **送信する通知を選んでください**${note}`,
+      flags: EPHEMERAL,
+      components: rows,
+    },
+  };
 }
 
-/** /help — Bot 概要とコマンド一覧を ephemeral で返す */
-function handleHelp(origin: string): InteractionResponse {
+/** /help — エンドユーザー向けの使い方ガイドを ephemeral で返す */
+function handleHelp(): InteractionResponse {
   const content = [
-    '📖 **EventMasterBot — コマンド一覧**',
+    '📖 **EventMasterBot — 使い方ガイド**',
     '',
-    '**誰でも使える**',
-    '`/help` — このヘルプを表示',
+    'このサーバーで **イベントの告知と出欠集計** を行う Bot です。',
+    'イベントの開催情報をチャンネルに自動で投稿し、あなたは **ボタンを押すだけ** で参加/不参加を伝えられます。',
+    '出欠を取らない「お知らせ専用」の通知にも対応しているので、回答ボタンが無い投稿はそのままお知らせとしてご覧ください。',
+    '未回答のまま放置すると、開催日が近づいたタイミングで DM にリマインドが届きます。',
     '',
-    '**管理者用**',
-    '`/recruit` — 募集メッセージを今すぐ送信',
-    '`/manage` — 管理画面の URL を表示',
+    '━━━━━━━━━━━━━━━━━',
+    '**■ 回答の仕方**',
     '',
-    '💡 出欠の **参加/不参加/未定** は募集メッセージのボタンから操作してください。',
-    '💡 メンバー管理・割り当て・休止設定などの細かい操作は管理画面（`/manage`）で行います。',
+    '募集メッセージの下のボタンを押すだけです。',
     '',
-    `🔗 管理画面: ${origin}/`,
+    '・**⭕ 参加** … 参加できる',
+    '・**❌ 不参加** … 参加できない',
+    '・**❓ 未定** … まだ分からない（あとで確定する想定）',
+    '・**📊 状況確認** … 今みんなの回答状況を一覧表示（自分にだけ見えます）',
+    '',
+    '単発イベントの日程調整では、ラベルが **可 / 不可 / 未確定** に切り替わります。',
+    '複数の候補日が同時に出ているときは、**都合のつく候補すべてに「可」を選べます**。',
+    '',
+    '━━━━━━━━━━━━━━━━━',
+    '**■ よくある質問**',
+    '',
+    '**Q. 一度押した回答は変えられますか?**',
+    '→ はい、何度でも押し直せます。最後に押した内容が記録されます。',
+    '',
+    '**Q. 自分の回答は他の人に見えますか?**',
+    '→ はい。「📊 状況確認」ボタンで誰でも参加/不参加/未定/未回答の一覧を見られます。',
+    '押した瞬間の **「✅ 参加 で記録しました!」** などの確認メッセージは自分にしか表示されません。',
+    '',
+    '**Q. 回答締切ってなんですか?**',
+    '→ 募集メッセージに **回答締切: YYYY/MM/DD HH:MM** と書かれていれば、その時刻までの回答が想定されています。',
+    '時刻が来るとチャンネルで「⏰ 回答を締め切りました」と告知されます。',
+    '締切後も回答や変更はできますが、その場合は **主催者へ自動で通知が飛びます**(記録も残ります)。',
+    '締切前に決めておくのが無難です。',
+    '',
+    '**Q. 「未定」と「不参加」の違いは?**',
+    '→ **不参加** は「行かないと決めた」。**未定** は「行けるか分からない」。',
+    '「未定」のまま日が近づくと、「そろそろ参加/不参加を確定してください」という DM が届くことがあります。',
+    '',
+    '**Q. DM が届いたんですが、これは何?**',
+    '→ 3 種類のうちのどれかです。いずれも DM 内のボタンでそのまま回答できます。',
+    '・**⏰ リマインド: ○日のイベント** … まだ未回答です。回答をお願いします。',
+    '・**❓ 未定者へのリマインド** … 「未定」のままなので確定してほしい、という案内です。',
+    '・**📊 参加間隔の確認** … 前回参加から間が空いている方への、次回参加検討の案内です。',
+    '',
+    '**Q. ボタンを押したら「対象ではない」「休止中」と言われました**',
+    '→ **対象ではない**: その募集は特定のロール宛てで、あなたがそのロールを持っていません。主催者に相談してください。',
+    '**休止中**: 主催者があなたを休止扱いに設定しています。解除も主催者側の操作です。',
+    '',
+    '**Q. ニックネームを変えたら反映されますか?**',
+    '→ 次にボタンを押した時点で自動更新されます。特別な操作は不要です。',
+    '',
+    '**Q. 事前登録は必要ですか?**',
+    '→ 不要です。初めて回答ボタンを押した瞬間に、自動でメンバー登録されます。',
+    '',
+    '━━━━━━━━━━━━━━━━━',
+    '**■ 困ったときは**',
+    '',
+    '主催者(管理者)にご相談ください。',
   ].join('\n');
   return ephemeral(content);
 }
@@ -211,6 +275,18 @@ async function handleButton(
   const action = sep >= 0 ? customId.slice(0, sep) : customId;
   const occurrenceId = sep >= 0 ? Number(customId.slice(sep + 1)) : NaN;
   if (!Number.isInteger(occurrenceId)) return ephemeral('❌ 不正なインタラクションです');
+
+  // /notify の通知選択（ボタン）: custom_id = notifypick_{notificationId}
+  // ※ パース都合で変数名は occurrenceId だが、ここでの実体は notificationId
+  if (action === 'notifypick') {
+    const n = await getNotification(db, occurrenceId);
+    if (!n) return ephemeral('❌ 対象の通知が見つかりません。');
+    if (n.channel_id !== interaction.channel_id) {
+      return ephemeral('❌ このチャンネル外の通知は送信できません。');
+    }
+    const r = await recruitNotificationNow(env, n);
+    return ephemeral((r.ok ? '✅ ' : '❌ ') + r.message);
+  }
 
   // 全候補の状況（単発の集約ボタン）: 末尾の数値は notificationId
   if (action === 'statusall') {

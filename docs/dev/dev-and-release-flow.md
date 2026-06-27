@@ -67,7 +67,7 @@ wrangler secret put ADMIN_TOKEN          # 管理UIのパスワード。例: ope
 npm run register-commands   # = node scripts/register-commands.js
 ```
 
-登録されるコマンド（v7.1.0 以降の現行構成）: `/recruit`（管理者・引数なし＝チャンネルから Notification を解決して募集投稿） / `/help`（誰でも・コマンド一覧と管理画面 URL を ephemeral 表示） / `/manage`（管理者・管理画面 URL を ephemeral 表示）。旧 `/assign` `/pause` `/resume` `/members` は 2026-06-20 のコマンド再編で削除済み（管理 UI で代替）。
+登録されるコマンド（現行構成）: `/notify`（管理者・引数なし＝チャンネルに紐づく Notification をボタン一覧で提示し、選択した通知の募集を即時投稿） / `/help`（誰でも・エンドユーザー向け使い方ガイドを ephemeral 表示） / `/manage`（管理者・管理画面 URL を ephemeral 表示）。旧 `/recruit` は 2026-06-28 に `/notify`（複数通知選択UI付き）へリネーム。旧 `/assign` `/pause` `/resume` `/members` は 2026-06-20 のコマンド再編で削除済み（管理 UI で代替）。
 
 ### 6. 初回デプロイ
 
