@@ -2315,7 +2315,10 @@
             { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },
             { id: 'occ', header: '開催日', accessor: (r) => r.occurrence_date || '' },
             { id: 'kind', header: '種別', accessor: (r) => kindLabel[r.kind] || r.kind },
-            { id: 'to', header: '宛先', accessor: (r) => r.user_id || '（チャンネル）' },
+            { id: 'to', header: '宛先', accessor: (r) => r.user_name || r.user_id || '（チャンネル）',
+              render: (v, r) => !r.user_id ? '<span class="muted">（チャンネル）</span>'
+                : r.user_name ? `${esc(r.user_name)} <span class="muted" style="font-size:11px">${esc(r.user_id)}</span>`
+                : esc(r.user_id) },
             { id: 'status', header: '結果', accessor: (r) => r.status,
               render: (v) => v === 'sent' ? '<span class="pill on">送信</span>' : v === 'failed' ? '<span class="pill" style="color:var(--danger);border-color:var(--danger)">失敗</span>' : `<span class="pill">${esc(v)}</span>` },
             { id: 'error', header: '詳細', accessor: (r) => r.error || '', render: (v) => v ? `<span class="muted">${esc(v)}</span>` : '' },

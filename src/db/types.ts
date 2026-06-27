@@ -224,6 +224,8 @@ export interface SendLog {
 /** リマインド送信履歴の一覧表示用（send_log に通知名/開催日を合成・admin 閲覧用） */
 export interface SendLogListItem extends SendLog {
   notification_name: string;
+  /** 宛先の表示名（display_name > user_name）。members に無ければ null（UI は user_id 表示にフォールバック） */
+  user_name: string | null;
   occurrence_date: string | null;
 }
 
