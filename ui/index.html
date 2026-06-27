@@ -386,6 +386,36 @@
       dialog.modal-lg .summary { background: var(--panel); border: 1px solid var(--border); color: var(--text); }
       dialog.modal-lg details.section { background: transparent; border: 1px solid var(--border); }
       dialog.modal-lg details.section > summary:hover { background: rgba(255, 255, 255, .03); }
+
+      /* ---------- 子ページ（メインエリア差し替え・ADR 0016 決定#1） ----------
+         フォーム系は <dialog>.show()（非モーダル＝背景暗転なし・top-layer でない）で開き、
+         main 内のリスト(section)を隠してメインエリアを占有する＝「ページ遷移」。
+         サイドナビ／ヘッダは main の外なので常駐する。 */
+      main.has-page > section { display: none; }
+      dialog.modal-lg.as-page[open] {
+        position: static; inset: auto; display: flex; flex-direction: column;
+        width: 100%; max-width: none; height: auto; max-height: none;
+        margin: 0; border: none; border-radius: 0; box-shadow: none;
+        background: transparent; min-height: calc(100vh - 130px);
+      }
+      dialog.modal-lg.as-page .modal-head {
+        background: transparent; padding: 0 0 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      dialog.modal-lg.as-page .modal-body { padding: 16px 0; }
+      dialog.modal-lg.as-page .modal-foot {
+        background: transparent; padding: 14px 0 0; border-top: 1px solid var(--border);
+      }
+      /* ページ見出し: パンくず＋戻る（ADR 0016 決定#7） */
+      .page-crumb { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+      .page-crumb a { color: var(--muted); text-decoration: none; }
+      .page-crumb a:hover { color: var(--text); text-decoration: underline; }
+      .page-back {
+        flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+        background: var(--panel); border: 1px solid var(--border2); border-radius: var(--r-sm);
+        color: var(--text); cursor: pointer; font-size: 13px; font-family: inherit;
+      }
+      .page-back:hover { background: var(--btn-secondary-hover); border-color: var(--border-hover); }
       
       /* セクション見出し＋アクション（例: 通知見出し横の「＋新規通知」） */
       .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
@@ -562,6 +592,49 @@
           <section id="sec-records" class="hidden"></section>
           <section id="sec-sendlog" class="hidden"></section>
           <section id="sec-setup" class="hidden"></section>
+
+          <!-- 子ページ（メインエリア差し替え・ADR 0016 決定#1）。main 直下に置き、
+               開いた dialog を show() で表示し main.has-page でリストを隠す。 -->
+          <dialog class="modal-lg as-page" id="occDialog" aria-labelledby="occTitle">
+            <div class="modal-head">
+              <div>
+                <div class="page-crumb"><a href="#" data-occ-close>通知</a> <span>›</span> <span id="occCrumb">開催回</span></div>
+                <h3 id="occTitle">開催回</h3>
+              </div>
+              <button type="button" class="page-back" data-occ-close aria-label="戻る">← 戻る</button>
+            </div>
+            <div class="modal-body" id="occBox"></div>
+            <div class="modal-foot"><button type="button" class="btn ghost" data-occ-close>閉じる</button></div>
+          </dialog>
+          <dialog class="modal-lg as-page" id="groupingDialog" aria-labelledby="groupingTitle">
+            <div class="modal-head">
+              <div>
+                <div class="page-crumb"><a href="#" id="groupingCrumbBack">開催回</a> <span>›</span> <span>グループ分け</span></div>
+                <h3 id="groupingTitle">グループ分け</h3>
+              </div>
+              <button type="button" class="page-back" id="groupingClose" aria-label="戻る">← 戻る</button>
+            </div>
+            <div class="modal-body" id="groupingBox"></div>
+            <div class="modal-foot">
+              <span id="groupingErr" class="muted" style="color:var(--danger);margin-right:auto"></span>
+              <button type="button" class="btn ghost" id="groupingCancel">閉じる</button>
+              <button type="button" class="btn secondary" id="groupingAnnounce">📣 結果をチャンネルへ投稿</button>
+              <button type="button" class="btn" id="groupingSave">保存</button>
+            </div>
+          </dialog>
+          <dialog class="modal-lg as-page" id="segMembersDialog" aria-labelledby="segMembersTitle">
+            <div class="modal-head">
+              <div>
+                <div class="page-crumb"><a href="#" data-segm-close>メンバー区分</a> <span>›</span> <span>メンバー</span></div>
+                <h3 id="segMembersTitle">区分メンバー</h3>
+              </div>
+              <button type="button" class="page-back" data-segm-close aria-label="戻る">← 戻る</button>
+            </div>
+            <div class="modal-body" id="segMembersBox"></div>
+            <div class="modal-foot"><button type="button" class="btn ghost" data-segm-close>閉じる</button></div>
+          </dialog>
+          <!-- 通知フォーム（新規/編集）。notifForm() が動的に注入する。 -->
+          <div id="nFormHost"></div>
         </main>
       </div>
       </div>
@@ -747,7 +820,27 @@
       }
       /** どのフォームに dirty があるか集約 */
       function anyDirty() { return formDirty || groupingState.dirty; }
-      /** ハッシュ→画面状態を同期。子ページ部はモーダル開閉で表現する。 */
+      /** ワークスペースのメインエリア（ピッカー側 <main> と区別するため #workspace 配下に限定）。 */
+      function wsMain() { return document.querySelector('#workspace main'); }
+      /** as-page な <dialog> が一つでも開いていれば main.has-page を立て、リスト(section)を隠す。 */
+      function syncHasPage() {
+        const m = wsMain();
+        const open = !!(m && m.querySelector('dialog.as-page[open]'));
+        if (m) m.classList.toggle('has-page', open);
+      }
+      /** 子ページ <dialog> を非モーダル(show)で開き、メインエリアを占有する（背景暗転なし）。 */
+      function openAsPage(dlg) {
+        if (!dlg) return;
+        if (!dlg.open) dlg.show();
+        syncHasPage();
+        window.scrollTo(0, 0);
+      }
+      /** 子ページ <dialog> を閉じ、他に開いた子ページが無ければリストへ戻す。 */
+      function closeAsPage(dlg) {
+        if (dlg && dlg.open) dlg.close();
+        syncHasPage();
+      }
+      /** ハッシュ→画面状態を同期。子ページ部は <dialog>.show() のページ表示で表現する。 */
       async function handleHashRoute() {
         const { guildId, rest } = parseHash();
         if (!guildId || !guild || guild.id !== guildId) return; // workspace 未起動 / 別サーバー切替は別経路
@@ -771,8 +864,8 @@
         } else if (want.kind !== 'list') {
           if (document.querySelector('.side .navitem.active')?.dataset.sec !== 'notifications') switchSection('notifications');
         }
-        // 開かない方向に動いた dialog は閉じる
-        const closeIfOpen = (sel) => { const d = $(sel); if (d && d.open) d.close(); };
+        // 開かない方向に動いた子ページは閉じる（has-page も同期）
+        const closeIfOpen = (sel) => { const d = $(sel); if (d && d.open) d.close(); syncHasPage(); };
         switch (want.kind) {
           case 'list':
             // すべてのフォーム系モーダルを閉じる（dirty 確認は close 系ヘルパ側に集約）
@@ -800,7 +893,7 @@
             loadOccurrences(want.nuuid);
             return;
           case 'grouping':
-            closeIfOpen('#nDialog'); closeIfOpen('#segMembersDialog');
+            closeIfOpen('#nDialog'); closeIfOpen('#occDialog'); closeIfOpen('#segMembersDialog');
             openGroupingDialog(want.ouuid, want.nuuid);
             return;
           case 'seg-members':
@@ -813,14 +906,14 @@
         const d = $('#' + id); if (!d || !d.open) return;
         await closer();
       }
-      /** 開催回モーダルを閉じて一覧へ */
+      /** 開催回ページを閉じて一覧へ */
       function closeOccurrencesPage() {
-        const d = $('#occDialog'); if (d && d.open) d.close();
+        closeAsPage($('#occDialog'));
         navigate('');
       }
-      /** 区分メンバーモーダルを閉じて一覧へ */
+      /** 区分メンバーページを閉じて一覧へ */
       function closeSegMembersPage() {
-        const d = $('#segMembersDialog'); if (d && d.open) d.close();
+        closeAsPage($('#segMembersDialog'));
         navigate('');
       }
       // ブラウザ操作: hashchange とリロード
@@ -837,7 +930,25 @@
         SECTIONS.forEach((s) => $('#sec-' + s).classList.toggle('hidden', s !== sec));
         LOADERS[sec]();
       }
-      document.querySelectorAll('.side .navitem').forEach((n) => { n.onclick = () => switchSection(n.dataset.sec); });
+      /** 開いている子ページ(<dialog>.as-page)をすべて閉じ、メインエリアを一覧へ戻す。 */
+      function closePagesNow() {
+        teardownSortables();
+        const m = wsMain();
+        if (m) m.querySelectorAll('dialog.as-page[open]').forEach((d) => { try { d.close(); } catch (_) {} });
+        syncHasPage();
+      }
+      // サイドナビ: 子ページを開いていたら離脱ガードののち閉じ、一覧タブへ切替＋URL を base に同期。
+      document.querySelectorAll('.side .navitem').forEach((n) => {
+        n.onclick = async () => {
+          if (anyDirty()) {
+            if (!(await confirmDialog('未保存の変更があります。移動してもよろしいですか？', { okLabel: '移動する', danger: true }))) return;
+          }
+          formDirty = false; groupingState.dirty = false;
+          closePagesNow();
+          switchSection(n.dataset.sec);
+          if (guild) { const base = '#g/' + guild.id; if (location.hash !== base) location.hash = base; }
+        };
+      });
 
       // ================= 繰り返し（RRULE は隠す） =================
       const WEEKDAYS = [['SU', '日'], ['MO', '月'], ['TU', '火'], ['WE', '水'], ['TH', '木'], ['FR', '金'], ['SA', '土']];
@@ -1097,26 +1208,11 @@
           <div class="sec-head"><h2>通知 (${notifs.length})</h2>
             <button class="btn" id="nNewBtn"${segs.length ? '' : ' disabled'}>＋ 新規通知</button></div>
           ${segs.length ? '' : '<p class="muted">※ 先に「メンバー区分」を作成してください（通知の対象になります）。</p>'}
-          ${notifs.length ? rows : '<div class="empty">まだ通知がありません。<br>「＋ 新規通知」から最初の通知を作成しましょう。</div>'}
-          <dialog class="modal-lg" id="occDialog" aria-labelledby="occTitle">
-            <div class="modal-head"><h3 id="occTitle">開催回</h3>
-              <button type="button" class="modal-close" data-occ-close aria-label="閉じる">✕</button></div>
-            <div class="modal-body" id="occBox"></div>
-            <div class="modal-foot"><button type="button" class="btn ghost" data-occ-close>閉じる</button></div>
-          </dialog>
-          <dialog class="modal-lg" id="groupingDialog" aria-labelledby="groupingTitle">
-            <div class="modal-head"><h3 id="groupingTitle">グループ分け</h3>
-              <button type="button" class="modal-close" id="groupingClose" aria-label="閉じる">✕</button></div>
-            <div class="modal-body" id="groupingBox"></div>
-            <div class="modal-foot">
-              <span id="groupingErr" class="muted" style="color:var(--danger);margin-right:auto"></span>
-              <button type="button" class="btn ghost" id="groupingCancel">閉じる</button>
-              <button type="button" class="btn secondary" id="groupingAnnounce">📣 結果をチャンネルへ投稿</button>
-              <button type="button" class="btn" id="groupingSave">保存</button>
-            </div>
-          </dialog>
-          ${segs.length ? notifForm() : ''}`;
+          ${notifs.length ? rows : '<div class="empty">まだ通知がありません。<br>「＋ 新規通知」から最初の通知を作成しましょう。</div>'}`;
 
+        // 通知フォーム（子ページ）は main 直下の #nFormHost に注入する（開催回/グループ分けの
+        // <dialog> は静的 HTML に常駐）。
+        $('#nFormHost').innerHTML = segs.length ? notifForm() : '';
         if (segs.length) {
           bindNotifForm();
           $('#nNewBtn').onclick = () => navigate('notifications/new');
@@ -1127,7 +1223,7 @@
         document.querySelectorAll('[data-nocc]').forEach((b) => {
           b.onclick = () => navigate('notifications/' + b.dataset.nocc + '/occurrences');
         });
-        document.querySelectorAll('#occDialog [data-occ-close]').forEach((b) => { b.onclick = () => closeOccurrencesPage(); });
+        document.querySelectorAll('#occDialog [data-occ-close]').forEach((b) => { b.onclick = (e) => { e.preventDefault(); closeOccurrencesPage(); }; });
         document.querySelectorAll('[data-nrecruit]').forEach((b) => {
           b.onclick = async () => {
             if (!(await confirmDialog('この通知の募集メッセージをチャンネルへ投稿します。', { okLabel: '送信する' }))) return;
@@ -1164,14 +1260,17 @@
         const hourOpts = Array.from({ length: 24 }, (_, h) =>
           `<option value="${h}"${h === 21 ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('');
         // 単発(oneoff)UI は撤去し recurring 専用。type は hidden で固定（oneoff の JS/バックエンドは休眠残置）。
-        // 案B: ネイティブ <dialog> モーダル。ヘッダ/フッタ固定・ボディのみスクロール。openNotifModal() で開く。
-        return `<dialog class="modal-lg" id="nDialog" aria-labelledby="nFormTitle">
+        // 子ページ（メインエリア差し替え・ADR 0016）。<dialog>.show() で開く（openNotifModal）。
+        return `<dialog class="modal-lg as-page" id="nDialog" aria-labelledby="nFormTitle">
           <input type="hidden" id="nId" value="" />
           <input type="hidden" id="nType" value="recurring" />
 
           <div class="modal-head">
-            <h3 id="nFormTitle">新規通知</h3>
-            <button type="button" class="modal-close" id="nClose" aria-label="閉じる">✕</button>
+            <div>
+              <div class="page-crumb"><a href="#" id="nCrumbBack">通知</a> <span>›</span> <span id="nCrumbLeaf">新規</span></div>
+              <h3 id="nFormTitle">新規通知</h3>
+            </div>
+            <button type="button" class="page-back" id="nClose" aria-label="戻る">← 戻る</button>
           </div>
 
           <div class="modal-body">
@@ -1372,14 +1471,13 @@
         $('#nQuota').onchange = syncNotifUI;
         $('#nMonthlyAdd').onclick = addMonthlyRule;
         $('#nSave').onclick = (e) => withBusy(e.currentTarget, saveNotif);
-        // モーダル開閉・破棄ガード（dirty 時のみ確認）。ESC/背景クリックも同経路。
+        // 子ページ開閉・破棄ガード（dirty 時のみ確認）。
         const dlg = $('#nDialog');
         $('#nClose').onclick = attemptCloseNotif;
         $('#nCancel').onclick = attemptCloseNotif;
+        const crumb = $('#nCrumbBack'); if (crumb) crumb.onclick = (e) => { e.preventDefault(); attemptCloseNotif(); };
         dlg.addEventListener('input', markDirty);
         dlg.addEventListener('change', markDirty);
-        dlg.addEventListener('cancel', (e) => { e.preventDefault(); attemptCloseNotif(); });
-        dlg.addEventListener('click', (e) => { if (e.target === dlg) attemptCloseNotif(); });
         syncNotifUI();
       }
       // 新規=空で開く／編集=流し込んで開く。値はプログラム設定なので input/change は発火せず dirty は立たない。
@@ -1390,13 +1488,13 @@
         if (n) fillNotifForm(n);
         $('#nFormErr').textContent = '';
         formDirty = false;
-        dlg.showModal();
-        const first = $('#nName'); if (first) first.focus(); // 開いた直後は✕でなく先頭入力へ
+        openAsPage(dlg);
+        const first = $('#nName'); if (first) first.focus();
       }
       async function attemptCloseNotif() {
         if (formDirty && !(await confirmDiscardNotif())) return;
         formDirty = false;
-        $('#nDialog').close();
+        closeAsPage($('#nDialog'));
         navigate(''); // 親（一覧）へ
       }
       // フォームモーダルは top-layer のため、確認も <dialog>（div の confirmDialog は下に隠れる）。
@@ -1422,6 +1520,7 @@
       }
       function resetNotifForm() {
         $('#nId').value = ''; $('#nFormTitle').textContent = '新規通知';
+        { const c = $('#nCrumbLeaf'); if (c) c.textContent = '新規'; }
         $('#nName').value = ''; $('#nTitle').value = ''; $('#nBody').value = '';
         $('#nMode').value = 'weekly';
         $('#nWeekday').value = 'SA'; renderMonthlyRules([]);
@@ -1439,6 +1538,7 @@
         // 単発(oneoff)UI は撤去済み。万一の旧データはこのフォームで編集しない（保存で壊さないため）。
         if (n.type === 'oneoff') { toast('単発通知の編集は現在無効です。', true); return; }
         $('#nId').value = n.uuid; $('#nFormTitle').textContent = '編集';
+        { const c = $('#nCrumbLeaf'); if (c) c.textContent = '編集'; }
         $('#nName').value = n.name || '';
         $('#nTitle').value = n.message_title || '';
         $('#nBody').value = n.message_body || '';
@@ -1514,7 +1614,7 @@
           if (uuid) await api('/notifications/' + uuid, { method: 'PUT', body: JSON.stringify(body) });
           else await api('/notifications', { method: 'POST', body: JSON.stringify(body) });
           formDirty = false;
-          $('#nDialog').close();
+          closeAsPage($('#nDialog'));
           navigate(''); // 一覧に戻る
           toast(uuid ? '更新しました' : '作成しました');
         } catch (e) { $('#nFormErr').textContent = e.message; }
@@ -1571,10 +1671,11 @@
         const recruitBtn = n
           ? `<div class="actions" style="margin-bottom:8px"><button class="btn sm secondary" id="occRecruit">📣 今すぐ募集を投稿</button></div>` : '';
         $('#occTitle').textContent = `開催回: ${n ? n.name : notifUuid} (${occs.length})`;
+        const _occCrumb = $('#occCrumb'); if (_occCrumb) _occCrumb.textContent = n ? n.name : '開催回';
         $('#occBox').innerHTML = `${recruitBtn}
           ${occs.length ? rows : '<div class="empty">開催回はまだありません。<br>単発は保存時に候補が、繰り返しは募集タイミングで生成されます。</div>'}
           <div id="assignBox"></div>`;
-        const _od = $('#occDialog'); if (_od && !_od.open) _od.showModal();
+        openAsPage($('#occDialog'));
         document.querySelectorAll('[data-occ]').forEach((b) => { b.onclick = () => loadAssignments(b.dataset.occ); });
         document.querySelectorAll('[data-grouping-occ]').forEach((b) => {
           b.onclick = () => navigate('notifications/' + b.dataset.nuuid + '/occurrences/' + b.dataset.groupingOcc + '/grouping');
@@ -1637,8 +1738,10 @@
         $('#groupingErr').textContent = '';
         const dlg = $('#groupingDialog');
         $('#groupingBox').innerHTML = '<p class="muted">読み込み中…</p>';
-        if (!dlg.open) dlg.showModal();
+        openAsPage(dlg);
         $('#groupingClose').onclick = $('#groupingCancel').onclick = attemptCloseGrouping;
+        const gcrumb = $('#groupingCrumbBack');
+        if (gcrumb) gcrumb.onclick = (e) => { e.preventDefault(); attemptCloseGrouping(); };
         try {
           await reloadGroupingView();
           $('#groupingSave').onclick = (e) => withBusy(e.currentTarget, saveGroupingMembers);
@@ -1651,7 +1754,7 @@
         }
         teardownSortables();
         groupingState.dirty = false;
-        $('#groupingDialog').close();
+        closeAsPage($('#groupingDialog'));
         // 親（開催回ページ）へ戻る
         if (groupingState.notifUuid) {
           navigate('notifications/' + groupingState.notifUuid + '/occurrences');
@@ -2030,18 +2133,12 @@
               <button class="btn ghost" type="button" id="segCancel">キャンセル</button>
               <button class="btn" id="segSave">保存</button>
             </div>
-          </dialog>
-          <dialog class="modal-lg" id="segMembersDialog" aria-labelledby="segMembersTitle">
-            <div class="modal-head"><h3 id="segMembersTitle">区分メンバー</h3>
-              <button type="button" class="modal-close" data-segm-close aria-label="閉じる">✕</button></div>
-            <div class="modal-body" id="segMembersBox"></div>
-            <div class="modal-foot"><button type="button" class="btn ghost" data-segm-close>閉じる</button></div>
           </dialog>`;
         $('#segSave').onclick = (e) => withBusy(e.currentTarget, saveSegment);
         $('#segNewBtn') && ($('#segNewBtn').onclick = () => { resetSegForm(); $('#segDialog').showModal(); $('#segName').focus(); });
         $('#segClose').onclick = () => $('#segDialog').close();
         $('#segCancel').onclick = () => $('#segDialog').close();
-        document.querySelectorAll('#segMembersDialog [data-segm-close]').forEach((b) => { b.onclick = () => closeSegMembersPage(); });
+        document.querySelectorAll('#segMembersDialog [data-segm-close]').forEach((b) => { b.onclick = (e) => { e.preventDefault(); closeSegMembersPage(); }; });
         document.querySelectorAll('[data-sedit]').forEach((b) => { b.onclick = () => { fillSegForm(segs.find((s) => s.uuid === b.dataset.sedit)); $('#segDialog').showModal(); }; });
         document.querySelectorAll('[data-smembers]').forEach((b) => { b.onclick = () => navigate('segments/' + b.dataset.smembers + '/members'); });
         document.querySelectorAll('[data-sdel]').forEach((b) => {
@@ -2109,7 +2206,7 @@
         $('#segMembersTitle').textContent = `区分メンバー: ${seg ? seg.name : segUuid} (${list.length})`;
         $('#segMembersBox').innerHTML = `${list.length ? rows : '<div class="empty">' + emptyMsg + '</div>'}
           ${panel}`;
-        const _smd = $('#segMembersDialog'); if (_smd && !_smd.open) _smd.showModal();
+        openAsPage($('#segMembersDialog'));
         document.querySelectorAll('[data-smtoggle]').forEach((b) => {
           b.onclick = async () => {
             try { await api('/segments/' + segUuid + '/members/' + encodeURIComponent(b.dataset.smtoggle),
