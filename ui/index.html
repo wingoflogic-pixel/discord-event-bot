@@ -1153,13 +1153,15 @@
       let cacheChannels = [], cacheSegments = [], cacheNotifs = [];
       function estimateBanner(est) {
         const over = est.overDaily || est.overWindow;
-        return `<div class="alert ${over ? 'warn' : ''}" style="margin-bottom:14px">
-          <div class="alert-icon">${over ? '⚠️' : '📊'}</div>
-          <div><div style="font-weight:600">送信量の目安（無料枠の推奨上限）</div>
+        // 通常時はバナー非表示。無料枠の推奨上限を超えたときだけ警告を出す（超過すると送信が無音で落ちるため安全網として残置）。
+        if (!over) return '';
+        return `<div class="alert warn" style="margin-bottom:14px">
+          <div class="alert-icon">⚠️</div>
+          <div><div style="font-weight:600">送信量が無料枠の推奨上限を超えています</div>
           <div class="muted" style="font-size:12.5px;margin-top:2px">
             推定ピーク: <b>${est.dailyTotal}</b> 件/日（同一送信時刻 最大 <b>${est.maxWindow}</b> 件）／
             推奨: 日次 ≤ ${est.recommendedDaily}・同一時刻 ≤ ${est.recommendedPerWindow}（送信予算 ${est.budget}/分）。
-            ${over ? '<b style="color:var(--warn)">推奨上限を超えています。</b>送信時刻を分散するか、Paid 化のうえ送信予算を上げてください。' : ''}
+            送信時刻を分散するか、Paid 化のうえ送信予算を上げてください。
           </div></div></div>`;
       }
       async function loadNotifications() {
@@ -2281,7 +2283,7 @@
           return;
         }
         window.EventBotTable.mount($('#recordsTable'), {
-          searchPlaceholder: '回答を全体検索',
+          search: false,
           columns: [
             { id: 'when', header: '開催日時', accessor: (r) => `${r.occurrence_date || ''}${r.occurrence_time ? ' ' + r.occurrence_time : ''}` },
             { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },
@@ -2307,7 +2309,7 @@
           return;
         }
         window.EventBotTable.mount($('#sendlogTable'), {
-          searchPlaceholder: '送信履歴を全体検索',
+          search: false,
           columns: [
             { id: 'date', header: '送信日', accessor: (r) => r.send_date || '' },
             { id: 'notif', header: '通知', accessor: (r) => r.notification_name || '' },

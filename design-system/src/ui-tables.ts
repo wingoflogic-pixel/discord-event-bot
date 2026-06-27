@@ -27,6 +27,8 @@ export interface MountOpts {
   rows: Record<string, unknown>[];
   pageSize?: number;
   searchPlaceholder?: string;
+  /** グローバル全体検索ボックスの表示。既定 true。false で非表示（列ごとの絞り込み・ソートは残る）。 */
+  search?: boolean;
 }
 
 function esc(s: unknown): string {
@@ -128,9 +130,13 @@ function mount(container: HTMLElement, opts: MountOpts): void {
       })
       .join('');
 
+    const searchBox =
+      opts.search === false
+        ? ''
+        : `<input class="ebt-global" value="${esc(state.globalFilter || '')}" placeholder="${esc(opts.searchPlaceholder || '全体を検索')}" style="max-width:280px" />`;
     container.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-        <input class="ebt-global" value="${esc(state.globalFilter || '')}" placeholder="${esc(opts.searchPlaceholder || '全体を検索')}" style="max-width:280px" />
+      <div style="display:flex;justify-content:${opts.search === false ? 'flex-end' : 'space-between'};align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        ${searchBox}
         <div class="muted" style="font-size:12px">${rowModel.rows.length} 件</div>
       </div>
       <div class="table-wrap">
