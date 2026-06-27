@@ -3,7 +3,7 @@ import type { MentionMode, NotificationType } from '../db/types';
 import { listGuilds, listGuildChannels, listGuildMembers } from '../discord/rest';
 import {
   listSegments,
-  getSegment,
+  getSegmentByUuid,
   createSegment,
   updateSegment,
   deleteSegment,
@@ -20,6 +20,7 @@ import {
   listNotifications,
   listNotificationsByGuild,
   getNotification,
+  getNotificationByUuid,
   createNotification,
   updateNotification,
   deleteNotification,
@@ -28,7 +29,7 @@ import {
   type NotificationInput,
 } from '../db/notifications';
 import {
-  getOccurrence,
+  getOccurrenceByUuid,
   setOccurrenceStatus,
   updateOccurrenceDate,
   listOccurrencesForNotification,
@@ -39,6 +40,8 @@ import { getResponsesForOccurrence, getStatusBuckets, listRecentResponses } from
 import { getAssignments, assignNumbers } from '../db/assignments';
 import {
   getGroupingView,
+  getGroupByUuid,
+  getConstraintByUuid,
   upsertGrouping,
   setGroupMembers,
   moveMemberToGroup,
@@ -125,6 +128,9 @@ function authorized(request: Request, env: Env): boolean {
   const token = header.slice(prefix.length);
   return !!env.ADMIN_TOKEN && timingSafeEqual(token, env.ADMIN_TOKEN);
 }
+
+/** URL パスの UUID セグメント（8-4-4-4-12 ハイフン入り 16 進文字列・ADR 0016） */
+const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
 /** Notification の入力ボディを正規化（数値フラグは 0/1） */
 function toNotificationInput(b: Record<string, unknown>): NotificationInput | null {
@@ -290,10 +296,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         );
       }
     }
-    // /segments/:id/members/:userId
-    const segMemberItem = path.match(/^\/segments\/(\d+)\/members\/(.+)$/);
+    // /segments/:uuid/members/:userId
+    const segMemberItem = path.match(new RegExp(`^/segments/(${UUID_RE})/members/(.+)$`));
     if (segMemberItem) {
-      const segmentId = Number(segMemberItem[1]);
+      const seg = await getSegmentByUuid(db, segMemberItem[1]);
+      if (!seg) return json({ error: 'Not found' }, 404);
       const userId = decodeURIComponent(segMemberItem[2]);
       if (method === 'PUT') {
         const b = (await request.json()) as { status?: string };
@@ -302,19 +309,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         if (b.status !== '' && b.status !== '休止中') {
           return json({ error: "status must be '' or '休止中'" }, 400);
         }
-        const ok = await setSegmentMemberStatus(db, segmentId, userId, b.status);
+        const ok = await setSegmentMemberStatus(db, seg.id, userId, b.status);
         return json({ ok }, ok ? 200 : 404);
       }
       if (method === 'DELETE') {
-        const ok = await removeSegmentMember(db, segmentId, userId);
+        const ok = await removeSegmentMember(db, seg.id, userId);
         return json({ ok }, ok ? 200 : 404);
       }
     }
-    // /segments/:id/members
-    const segMembers = path.match(/^\/segments\/(\d+)\/members$/);
+    // /segments/:uuid/members
+    const segMembers = path.match(new RegExp(`^/segments/(${UUID_RE})/members$`));
     if (segMembers) {
-      const segmentId = Number(segMembers[1]);
-      if (method === 'GET') return json(await listSegmentMembers(db, segmentId));
+      const seg = await getSegmentByUuid(db, segMembers[1]);
+      if (!seg) return json({ error: 'Not found' }, 404);
+      if (method === 'GET') return json(await listSegmentMembers(db, seg.id));
       if (method === 'POST') {
         const b = (await request.json()) as {
           user_id?: string;
@@ -322,17 +330,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           display_name?: string | null;
         };
         if (!b.user_id) return json({ error: 'user_id required' }, 400);
-        await addSegmentMember(db, segmentId, b.user_id, {
+        await addSegmentMember(db, seg.id, b.user_id, {
           user_name: b.user_name ?? null,
           display_name: b.display_name ?? null,
         });
         return json({ ok: true }, 201);
       }
     }
-    // /segments/:id/sync-from-role （ロール管理区分を Discord ロールから手動同期・ADR 0009）
-    const segSync = path.match(/^\/segments\/(\d+)\/sync-from-role$/);
+    // /segments/:uuid/sync-from-role （ロール管理区分を Discord ロールから手動同期・ADR 0009）
+    const segSync = path.match(new RegExp(`^/segments/(${UUID_RE})/sync-from-role$`));
     if (segSync && method === 'POST') {
-      const seg = await getSegment(db, Number(segSync[1]));
+      const seg = await getSegmentByUuid(db, segSync[1]);
       if (!seg) return json({ error: 'Not found' }, 404);
       if (!seg.mention_role_id) {
         return json({ error: 'この区分はロール管理ではありません（ロール未設定）。' }, 400);
@@ -341,14 +349,15 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const r = await syncSegmentFromRole(env, seg, { allowEmpty: true });
       return json(r, r.ok ? 200 : 400);
     }
-    // /segments/:id
-    const segId = path.match(/^\/segments\/(\d+)$/);
+    // /segments/:uuid
+    const segId = path.match(new RegExp(`^/segments/(${UUID_RE})$`));
     if (segId) {
-      const id = Number(segId[1]);
+      const seg = await getSegmentByUuid(db, segId[1]);
+      if (!seg) return json({ error: 'Not found' }, 404);
       if (method === 'PUT') {
         const b = (await request.json()) as { name?: string; mention_role_id?: string | null };
         if (!b.name) return json({ error: 'name required' }, 400);
-        const ok = await updateSegment(db, id, {
+        const ok = await updateSegment(db, seg.id, {
           name: b.name,
           mention_role_id: b.mention_role_id ?? null,
         });
@@ -356,11 +365,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }
       if (method === 'DELETE') {
         // 対象 Notification がある場合は削除させない（409）
-        const count = await countNotificationsForSegment(db, id);
+        const count = await countNotificationsForSegment(db, seg.id);
         if (count > 0) {
           return json({ error: 'segment has notifications', count }, 409);
         }
-        const ok = await deleteSegment(db, id);
+        const ok = await deleteSegment(db, seg.id);
         return json({ ok }, ok ? 200 : 404);
       }
     }
@@ -390,6 +399,16 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     // ============ notifications ============
+    // body 内の segment_uuid → segment_id 解決（ADR 0016）
+    async function resolveSegmentUuid(body: Record<string, unknown>): Promise<string | null> {
+      if (typeof body.segment_uuid !== 'string' || !body.segment_uuid) {
+        return 'segment_uuid required';
+      }
+      const seg = await getSegmentByUuid(db, body.segment_uuid);
+      if (!seg) return 'segment not found';
+      body.segment_id = seg.id;
+      return null;
+    }
     if (path === '/notifications') {
       if (method === 'GET') {
         const guildId = url.searchParams.get('guild_id');
@@ -397,18 +416,18 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }
       if (method === 'POST') {
         const body = (await request.json()) as Record<string, unknown>;
+        const err = await resolveSegmentUuid(body);
+        if (err) return json({ error: err }, 400);
         const input = toNotificationInput(body);
         if (!input) return json({ error: 'Invalid body' }, 400);
-        // 見出しは必須（ADR 0010）。空だと投稿の1行目が欠落する。
         if (!input.message_title) return json({ error: '見出しは必須です。' }, 400);
-        // 繰り返しは曜日/第N曜ルール（rrule）必須。空だと nextOccurrenceDate が常に null で無音通知になる。
         if (input.type === 'recurring' && !input.rrule) {
           return json({ error: '繰り返しは曜日/第N曜ルールが必須です。' }, 400);
         }
         if (input.type === 'oneoff') {
           const slots = candidateSlotsOf(body, input.one_off_date, input.start_time);
           if (slots.length === 0) return json({ error: '単発は候補日時が必須です' }, 400);
-          input.one_off_date = slots[0].date; // 最早スロットをスケジュール計算の基準に
+          input.one_off_date = slots[0].date;
           input.start_time = slots[0].time;
           const created = await createNotification(db, input);
           await syncCandidateOccurrences(db, created.id, slots);
@@ -417,154 +436,152 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         return json(await createNotification(db, input), 201);
       }
     }
-    // /notifications/:id/occurrences
-    const notifOccs = path.match(/^\/notifications\/(\d+)\/occurrences$/);
+    // /notifications/:uuid/occurrences
+    const notifOccs = path.match(new RegExp(`^/notifications/(${UUID_RE})/occurrences$`));
     if (notifOccs && method === 'GET') {
-      const id = Number(notifOccs[1]);
-      const limit = parseLimit(url.searchParams.get('limit'), 100);
-      return json(await listOccurrencesForNotification(db, id, limit));
-    }
-    // /notifications/:id/decide （複数候補日の最終確定）
-    const notifDecide = path.match(/^\/notifications\/(\d+)\/decide$/);
-    if (notifDecide && method === 'POST') {
-      const nid = Number(notifDecide[1]);
-      const b = (await request.json()) as { occurrence_id?: number };
-      const occId = Number(b.occurrence_id);
-      if (!Number.isInteger(occId)) return json({ error: 'occurrence_id required' }, 400);
-      const n = await getNotification(db, nid);
+      const n = await getNotificationByUuid(db, notifOccs[1]);
       if (!n) return json({ error: 'Not found' }, 404);
-      const occ = await getOccurrence(db, occId);
-      if (!occ || occ.notification_id !== nid) {
+      const limit = parseLimit(url.searchParams.get('limit'), 100);
+      return json(await listOccurrencesForNotification(db, n.id, limit));
+    }
+    // /notifications/:uuid/decide （複数候補日の最終確定）
+    const notifDecide = path.match(new RegExp(`^/notifications/(${UUID_RE})/decide$`));
+    if (notifDecide && method === 'POST') {
+      const n = await getNotificationByUuid(db, notifDecide[1]);
+      if (!n) return json({ error: 'Not found' }, 404);
+      const b = (await request.json()) as { occurrence_uuid?: string };
+      if (typeof b.occurrence_uuid !== 'string' || !b.occurrence_uuid) {
+        return json({ error: 'occurrence_uuid required' }, 400);
+      }
+      const occ = await getOccurrenceByUuid(db, b.occurrence_uuid);
+      if (!occ || occ.notification_id !== n.id) {
         return json({ error: 'occurrence does not belong to notification' }, 400);
       }
-      await decideOccurrence(db, nid, occId);
-      // 確定アナウンス（投稿失敗は致命的でない）
+      await decideOccurrence(db, n.id, occ.id);
       const announced = await sendChannelMessage(
         env,
         n.channel_id,
         `✅ **開催日が確定しました**\n\n**${occ.occurrence_date}** ${formatTimeRange(occ.start_time || n.start_time, n.duration_minutes)} に開催します！\n\n出欠が変わる場合は下のボタンで回答してください。`,
         createButtonComponents(occ.id, n.type),
       );
-      return json({ ok: true, decided_occurrence_id: occId, announced });
+      return json({ ok: true, decided_occurrence_uuid: occ.uuid, announced });
     }
-    // /notifications/:id/undecide （確定解除：落選候補を scheduled に戻す）
-    const notifUndecide = path.match(/^\/notifications\/(\d+)\/undecide$/);
+    // /notifications/:uuid/undecide
+    const notifUndecide = path.match(new RegExp(`^/notifications/(${UUID_RE})/undecide$`));
     if (notifUndecide && method === 'POST') {
-      const nid = Number(notifUndecide[1]);
-      const n = await getNotification(db, nid);
+      const n = await getNotificationByUuid(db, notifUndecide[1]);
       if (!n) return json({ error: 'Not found' }, 404);
-      await undecideNotification(db, nid);
+      await undecideNotification(db, n.id);
       return json({ ok: true });
     }
-    // /notifications/:id/recruit （管理画面から今すぐ募集を投稿）
-    const notifRecruit = path.match(/^\/notifications\/(\d+)\/recruit$/);
+    // /notifications/:uuid/recruit
+    const notifRecruit = path.match(new RegExp(`^/notifications/(${UUID_RE})/recruit$`));
     if (notifRecruit && method === 'POST') {
-      const nid = Number(notifRecruit[1]);
-      const n = await getNotification(db, nid);
+      const n = await getNotificationByUuid(db, notifRecruit[1]);
       if (!n) return json({ error: 'Not found' }, 404);
       const r = await recruitNotificationNow(env, n);
       return json(r, r.ok ? 200 : 400);
     }
-    // /notifications/:id
-    const notifId = path.match(/^\/notifications\/(\d+)$/);
+    // /notifications/:uuid
+    const notifId = path.match(new RegExp(`^/notifications/(${UUID_RE})$`));
     if (notifId) {
-      const id = Number(notifId[1]);
+      const n = await getNotificationByUuid(db, notifId[1]);
+      if (!n) return json({ error: 'Not found' }, 404);
       if (method === 'GET') {
-        const row = await getNotification(db, id);
-        return row ? json(row) : json({ error: 'Not found' }, 404);
+        return json(n);
       }
       if (method === 'PUT') {
         const body = (await request.json()) as Record<string, unknown>;
+        const err = await resolveSegmentUuid(body);
+        if (err) return json({ error: err }, 400);
         const input = toNotificationInput(body);
         if (!input) return json({ error: 'Invalid body' }, 400);
-        // 見出しは必須（ADR 0010）。空だと投稿の1行目が欠落する。
         if (!input.message_title) return json({ error: '見出しは必須です。' }, 400);
-        // 繰り返しは曜日/第N曜ルール（rrule）必須。空だと nextOccurrenceDate が常に null で無音通知になる。
         if (input.type === 'recurring' && !input.rrule) {
           return json({ error: '繰り返しは曜日/第N曜ルールが必須です。' }, 400);
         }
         if (input.type === 'oneoff') {
           const slots = candidateSlotsOf(body, input.one_off_date, input.start_time);
           if (slots.length === 0) return json({ error: '単発は候補日時が必須です' }, 400);
-          input.one_off_date = slots[0].date; // 最早スロットを基準に
+          input.one_off_date = slots[0].date;
           input.start_time = slots[0].time;
-          const ok = await updateNotification(db, id, input);
+          const ok = await updateNotification(db, n.id, input);
           if (!ok) return json({ ok }, 404);
-          // 確定済み（decided_occurrence_id 設定済み）は候補を再同期しない（落選回の復活を防ぐ）。
-          const current = await getNotification(db, id);
+          const current = await getNotification(db, n.id);
           if (current && current.decided_occurrence_id == null) {
-            await syncCandidateOccurrences(db, id, slots);
+            await syncCandidateOccurrences(db, n.id, slots);
           }
           return json({ ok });
         }
-        const ok = await updateNotification(db, id, input);
+        const ok = await updateNotification(db, n.id, input);
         return json({ ok }, ok ? 200 : 404);
       }
       if (method === 'DELETE') {
-        const ok = await deleteNotification(db, id);
+        const ok = await deleteNotification(db, n.id);
         return json({ ok }, ok ? 200 : 404);
       }
     }
 
     // ============ occurrences ============
-    // /occurrences/:id/assign
-    const occAssign = path.match(/^\/occurrences\/(\d+)\/assign$/);
+    // /occurrences/:uuid/assign
+    const occAssign = path.match(new RegExp(`^/occurrences/(${UUID_RE})/assign$`));
     if (occAssign && method === 'POST') {
-      const id = Number(occAssign[1]);
-      return json(await assignNumbers(db, id));
+      const occ = await getOccurrenceByUuid(db, occAssign[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
+      return json(await assignNumbers(db, occ.id));
     }
-    // /occurrences/:id/responses
-    const occResponses = path.match(/^\/occurrences\/(\d+)\/responses$/);
+    // /occurrences/:uuid/responses
+    const occResponses = path.match(new RegExp(`^/occurrences/(${UUID_RE})/responses$`));
     if (occResponses && method === 'GET') {
-      const id = Number(occResponses[1]);
-      return json(await getResponsesForOccurrence(db, id));
+      const occ = await getOccurrenceByUuid(db, occResponses[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
+      return json(await getResponsesForOccurrence(db, occ.id));
     }
-    // /occurrences/:id/status （候補日ごとの出欠集計バケット）
-    const occStatus = path.match(/^\/occurrences\/(\d+)\/status$/);
+    // /occurrences/:uuid/status
+    const occStatus = path.match(new RegExp(`^/occurrences/(${UUID_RE})/status$`));
     if (occStatus && method === 'GET') {
-      const id = Number(occStatus[1]);
-      const occ = await getOccurrence(db, id);
+      const occ = await getOccurrenceByUuid(db, occStatus[1]);
       if (!occ) return json({ error: 'Not found' }, 404);
       const n = await getNotification(db, occ.notification_id);
       if (!n) return json({ error: 'Not found' }, 404);
-      return json(await getStatusBuckets(db, id, n.segment_id));
+      return json(await getStatusBuckets(db, occ.id, n.segment_id));
     }
-    // /occurrences/:id/assignments
-    const occAssignments = path.match(/^\/occurrences\/(\d+)\/assignments$/);
+    // /occurrences/:uuid/assignments
+    const occAssignments = path.match(new RegExp(`^/occurrences/(${UUID_RE})/assignments$`));
     if (occAssignments && method === 'GET') {
-      const id = Number(occAssignments[1]);
-      return json(await getAssignments(db, id));
+      const occ = await getOccurrenceByUuid(db, occAssignments[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
+      return json(await getAssignments(db, occ.id));
     }
-    // /occurrences/:id ({status|date})
-    const occId = path.match(/^\/occurrences\/(\d+)$/);
+    // /occurrences/:uuid ({status|date})
+    const occId = path.match(new RegExp(`^/occurrences/(${UUID_RE})$`));
     if (occId && method === 'PUT') {
-      const id = Number(occId[1]);
+      const occ = await getOccurrenceByUuid(db, occId[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
       const b = (await request.json()) as { status?: string; date?: string };
       if (b.status !== undefined) {
         if (b.status !== 'scheduled' && b.status !== 'cancelled') {
           return json({ error: 'invalid status' }, 400);
         }
-        const ok = await setOccurrenceStatus(db, id, b.status);
+        const ok = await setOccurrenceStatus(db, occ.id, b.status);
         return json({ ok }, ok ? 200 : 404);
       }
       if (b.date !== undefined) {
         if (!b.date) return json({ error: 'date required' }, 400);
-        const ok = await updateOccurrenceDate(db, id, b.date);
+        const ok = await updateOccurrenceDate(db, occ.id, b.date);
         return json({ ok }, ok ? 200 : 404);
       }
       return json({ error: 'status or date required' }, 400);
     }
 
     // ============ grouping（グループ分け・ADR 0015）============
-    // /occurrences/:id/grouping
-    //   GET    現在のグループ分けビュー（groups + pool + diff）
-    //   PUT    グループ数を upsert（{group_count}）。減らすと余剰メンバーはプールに戻る
-    //   DELETE グループ分けを削除（groups/group_members もカスケード）
-    const occGrouping = path.match(/^\/occurrences\/(\d+)\/grouping$/);
+    // /occurrences/:uuid/grouping
+    const occGrouping = path.match(new RegExp(`^/occurrences/(${UUID_RE})/grouping$`));
     if (occGrouping) {
-      const occId = Number(occGrouping[1]);
+      const occ = await getOccurrenceByUuid(db, occGrouping[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
       if (method === 'GET') {
-        return json(await getGroupingView(db, occId));
+        return json(await getGroupingView(db, occ.id));
       }
       if (method === 'PUT') {
         const b = (await request.json()) as { group_count?: number };
@@ -572,75 +589,83 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         if (!Number.isInteger(gc) || gc < 1 || gc > 100) {
           return json({ error: 'group_count must be 1..100' }, 400);
         }
-        await upsertGrouping(db, occId, gc);
-        return json(await getGroupingView(db, occId));
+        await upsertGrouping(db, occ.id, gc);
+        return json(await getGroupingView(db, occ.id));
       }
       if (method === 'DELETE') {
-        const ok = await deleteGrouping(db, occId);
+        const ok = await deleteGrouping(db, occ.id);
         return json({ ok }, ok ? 200 : 404);
       }
     }
-    // /occurrences/:id/grouping/members  PUT: メンバー所属を一括設定
-    //   body: { assignments: [{group_id, user_ids: []}] }
-    const occGroupingMembers = path.match(/^\/occurrences\/(\d+)\/grouping\/members$/);
+    // /occurrences/:uuid/grouping/members  PUT
+    //   body: { assignments: [{group_uuid, user_ids: []}] }
+    const occGroupingMembers = path.match(new RegExp(`^/occurrences/(${UUID_RE})/grouping/members$`));
     if (occGroupingMembers && method === 'PUT') {
-      const occId = Number(occGroupingMembers[1]);
+      const occ = await getOccurrenceByUuid(db, occGroupingMembers[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
       const b = (await request.json()) as {
-        assignments?: { group_id?: number; user_ids?: string[] }[];
+        assignments?: { group_uuid?: string; user_ids?: string[] }[];
       };
       const assignments = Array.isArray(b.assignments) ? b.assignments : [];
       const normalized: { group_id: number; user_ids: string[] }[] = [];
       for (const a of assignments) {
-        const gid = Number(a.group_id);
+        if (typeof a.group_uuid !== 'string') continue;
+        const grp = await getGroupByUuid(db, a.group_uuid);
+        if (!grp) continue;
         const uids = Array.isArray(a.user_ids) ? a.user_ids.filter((u) => typeof u === 'string') : [];
-        if (!Number.isInteger(gid)) continue;
-        normalized.push({ group_id: gid, user_ids: uids });
+        normalized.push({ group_id: grp.id, user_ids: uids });
       }
-      const view = await getGroupingView(db, occId);
+      const view = await getGroupingView(db, occ.id);
       if (!view.grouping) return json({ error: 'grouping not initialized' }, 400);
       await setGroupMembers(db, view.grouping.id, normalized);
-      return json(await getGroupingView(db, occId));
+      return json(await getGroupingView(db, occ.id));
     }
-    // /occurrences/:id/grouping/move  PUT: 1 メンバーを移動
-    //   body: { user_id, to_group_id|null }
-    const occGroupingMove = path.match(/^\/occurrences\/(\d+)\/grouping\/move$/);
+    // /occurrences/:uuid/grouping/move  PUT
+    //   body: { user_id, to_group_uuid|null }
+    const occGroupingMove = path.match(new RegExp(`^/occurrences/(${UUID_RE})/grouping/move$`));
     if (occGroupingMove && method === 'PUT') {
-      const occId = Number(occGroupingMove[1]);
-      const b = (await request.json()) as { user_id?: string; to_group_id?: number | null };
+      const occ = await getOccurrenceByUuid(db, occGroupingMove[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
+      const b = (await request.json()) as { user_id?: string; to_group_uuid?: string | null };
       const userId = typeof b.user_id === 'string' ? b.user_id : '';
       if (!userId) return json({ error: 'user_id required' }, 400);
-      const view = await getGroupingView(db, occId);
+      const view = await getGroupingView(db, occ.id);
       if (!view.grouping) return json({ error: 'grouping not initialized' }, 400);
-      const toGroupId = b.to_group_id == null ? null : Number(b.to_group_id);
-      await moveMemberToGroup(db, view.grouping.id, userId, toGroupId);
-      return json(await getGroupingView(db, occId));
-    }
-    // /occurrences/:id/grouping/rename  PUT: グループ名を変更
-    //   body: { group_id, name }
-    const occGroupingRename = path.match(/^\/occurrences\/(\d+)\/grouping\/rename$/);
-    if (occGroupingRename && method === 'PUT') {
-      const b = (await request.json()) as { group_id?: number; name?: string };
-      const gid = Number(b.group_id);
-      const name = typeof b.name === 'string' ? b.name.trim().slice(0, 50) : '';
-      if (!Number.isInteger(gid) || !name) {
-        return json({ error: 'group_id and name required' }, 400);
+      let toGroupId: number | null = null;
+      if (b.to_group_uuid != null) {
+        const grp = await getGroupByUuid(db, b.to_group_uuid);
+        if (!grp) return json({ error: 'group not found' }, 400);
+        toGroupId = grp.id;
       }
-      const ok = await renameGroup(db, gid, name);
+      await moveMemberToGroup(db, view.grouping.id, userId, toGroupId);
+      return json(await getGroupingView(db, occ.id));
+    }
+    // /occurrences/:uuid/grouping/rename  PUT
+    //   body: { group_uuid, name }
+    const occGroupingRename = path.match(new RegExp(`^/occurrences/(${UUID_RE})/grouping/rename$`));
+    if (occGroupingRename && method === 'PUT') {
+      const occ = await getOccurrenceByUuid(db, occGroupingRename[1]);
+      if (!occ) return json({ error: 'Not found' }, 404);
+      const b = (await request.json()) as { group_uuid?: string; name?: string };
+      const name = typeof b.name === 'string' ? b.name.trim().slice(0, 50) : '';
+      if (typeof b.group_uuid !== 'string' || !b.group_uuid || !name) {
+        return json({ error: 'group_uuid and name required' }, 400);
+      }
+      const grp = await getGroupByUuid(db, b.group_uuid);
+      if (!grp) return json({ error: 'group not found' }, 404);
+      const ok = await renameGroup(db, grp.id, name);
       return json({ ok }, ok ? 200 : 404);
     }
-    // /occurrences/:id/grouping/auto-assign  POST: 自動配置を実行
-    //   結果は DB に保存し、新しいビューを返す
-    const occGroupingAuto = path.match(/^\/occurrences\/(\d+)\/grouping\/auto-assign$/);
+    // /occurrences/:uuid/grouping/auto-assign  POST
+    const occGroupingAuto = path.match(new RegExp(`^/occurrences/(${UUID_RE})/grouping/auto-assign$`));
     if (occGroupingAuto && method === 'POST') {
-      const occId = Number(occGroupingAuto[1]);
-      const occ = await getOccurrence(db, occId);
+      const occ = await getOccurrenceByUuid(db, occGroupingAuto[1]);
       if (!occ) return json({ error: 'occurrence not found' }, 404);
-      const view = await getGroupingView(db, occId);
+      const view = await getGroupingView(db, occ.id);
       if (!view.grouping) return json({ error: 'grouping not initialized' }, 400);
       const constraints = await listConstraints(db, occ.notification_id);
       const participantIds = [
         ...view.pool.map((p) => p.user_id),
-        // グループに入っているがまだ参加中のメンバーも対象に再分配する
         ...view.groups.flatMap((g) =>
           g.members
             .filter(
@@ -659,17 +684,16 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         user_ids,
       }));
       await setGroupMembers(db, view.grouping.id, assignments);
-      return json(await getGroupingView(db, occId));
+      return json(await getGroupingView(db, occ.id));
     }
-    // /occurrences/:id/grouping/announce  POST: 結果を Discord チャンネルへ投稿
-    const occGroupingAnnounce = path.match(/^\/occurrences\/(\d+)\/grouping\/announce$/);
+    // /occurrences/:uuid/grouping/announce  POST
+    const occGroupingAnnounce = path.match(new RegExp(`^/occurrences/(${UUID_RE})/grouping/announce$`));
     if (occGroupingAnnounce && method === 'POST') {
-      const occId = Number(occGroupingAnnounce[1]);
-      const occ = await getOccurrence(db, occId);
+      const occ = await getOccurrenceByUuid(db, occGroupingAnnounce[1]);
       if (!occ) return json({ error: 'occurrence not found' }, 404);
       const n = await getNotification(db, occ.notification_id);
       if (!n) return json({ error: 'notification not found' }, 404);
-      const view = await getGroupingView(db, occId);
+      const view = await getGroupingView(db, occ.id);
       if (!view.grouping) return json({ error: 'grouping not initialized' }, 400);
       const lines: string[] = [];
       lines.push(
@@ -689,14 +713,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     // ============ constraints（ペア制約・Notification 単位・ADR 0015）============
-    // /notifications/:id/constraints
-    //   GET  一覧
-    //   POST 作成/更新（{user_id_a, user_id_b, direction, strength}）
-    const notifConstraints = path.match(/^\/notifications\/(\d+)\/constraints$/);
+    // /notifications/:nuuid/constraints
+    const notifConstraints = path.match(new RegExp(`^/notifications/(${UUID_RE})/constraints$`));
     if (notifConstraints) {
-      const nid = Number(notifConstraints[1]);
+      const n = await getNotificationByUuid(db, notifConstraints[1]);
+      if (!n) return json({ error: 'Not found' }, 404);
       if (method === 'GET') {
-        return json(await listConstraints(db, nid));
+        return json(await listConstraints(db, n.id));
       }
       if (method === 'POST') {
         const b = (await request.json()) as {
@@ -712,15 +735,18 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           b.direction === 'apart' ? 'apart' : 'together';
         const str: ConstraintStrength =
           b.strength === 'preferred' ? 'preferred' : 'required';
-        const created = await upsertConstraint(db, nid, a, c, dir, str);
+        const created = await upsertConstraint(db, n.id, a, c, dir, str);
         return json(created, 201);
       }
     }
-    // /notifications/:nid/constraints/:cid  DELETE
-    const constraintDelete = path.match(/^\/notifications\/(\d+)\/constraints\/(\d+)$/);
+    // /notifications/:nuuid/constraints/:cuuid  DELETE
+    const constraintDelete = path.match(
+      new RegExp(`^/notifications/(${UUID_RE})/constraints/(${UUID_RE})$`),
+    );
     if (constraintDelete && method === 'DELETE') {
-      const cid = Number(constraintDelete[2]);
-      const ok = await deleteConstraint(db, cid);
+      const cst = await getConstraintByUuid(db, constraintDelete[2]);
+      if (!cst) return json({ ok: false }, 404);
+      const ok = await deleteConstraint(db, cst.id);
       return json({ ok }, ok ? 200 : 404);
     }
 
