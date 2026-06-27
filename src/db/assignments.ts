@@ -1,14 +1,6 @@
 import type { Member } from './types';
 import { resolveDisplayName } from './types';
-
-/** Fisher–Yates シャッフル（in-place） */
-function shuffle<T>(arr: T[]): T[] {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
+import { shuffle } from '../lib/shuffle';
 
 export type AssignMode = 'first-come' | 'random';
 
