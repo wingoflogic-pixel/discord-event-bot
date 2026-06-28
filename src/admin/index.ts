@@ -16,7 +16,8 @@ import {
   getActiveSegmentMembers,
 } from '../db/segments';
 import { syncSegmentFromRole } from '../discord/syncSegment';
-import { getAllMembers, upsertMember, deleteMember } from '../db/members';
+import { getAllMembers, upsertMember, deleteMember, getMember } from '../db/members';
+import { resolveDisplayName } from '../db/types';
 import {
   listNotifications,
   listNotificationsByGuild,
@@ -722,7 +723,23 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const n = await getNotificationByUuid(db, notifConstraints[1]);
       if (!n) return json({ error: 'Not found' }, 404);
       if (method === 'GET') {
-        return json(await listConstraints(db, n.id));
+        const rows = await listConstraints(db, n.id);
+        const cache = new Map<string, string | null>();
+        const nameOf = async (uid: string): Promise<string | null> => {
+          if (cache.has(uid)) return cache.get(uid) ?? null;
+          const m = await getMember(db, uid);
+          const name = m ? resolveDisplayName(m) : null;
+          cache.set(uid, name);
+          return name;
+        };
+        const enriched = await Promise.all(
+          rows.map(async (c) => ({
+            ...c,
+            user_a_name: await nameOf(c.user_id_a),
+            user_b_name: await nameOf(c.user_id_b),
+          })),
+        );
+        return json(enriched);
       }
       if (method === 'POST') {
         const b = (await request.json()) as {

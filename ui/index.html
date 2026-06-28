@@ -1803,9 +1803,10 @@
         // DOM data 属性として保持する識別子。pool は文字列、それ以外は group の UUID。
         const groupKey = isPool ? 'pool' : esc(g.uuid);
         const cards = (g.members || []).map((m) => renderCard(m, isPool ? null : g.id)).join('');
+        const uuidAttr = !isPool && g.uuid ? `data-group-uuid="${esc(g.uuid)}"` : '';
         const head = isPool
           ? `<div class="grouping-col-head"><span class="name">📥 ${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`
-          : `<div class="grouping-col-head"><span class="name" data-group-uuid="${esc(g.uuid)}" contenteditable="false" title="クリックで名前変更">${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`;
+          : `<div class="grouping-col-head"><span class="name" ${uuidAttr} contenteditable="false" title="クリックで名前変更">${esc(g.name)}</span><span class="count" id="count-${groupKey}">${(g.members || []).length}</span></div>`;
         return `<div class="${cls}" data-group-key="${groupKey}">
           ${head}
           <div class="grouping-cards" data-group-key="${groupKey}">${cards}</div>
@@ -1876,6 +1877,7 @@
             const newName = el.textContent.trim().slice(0, 50);
             if (!newName) { el.textContent = '（名無し）'; return; }
             const guuid = el.dataset.groupUuid;
+            if (!guuid) { toast('内部エラー: group_uuid が取得できませんでした。一度再読み込みしてください', true); return; }
             try {
               await api('/occurrences/' + groupingState.occUuid + '/grouping/rename',
                 { method: 'PUT', body: JSON.stringify({ group_uuid: guuid, name: newName }) });
@@ -1894,16 +1896,20 @@
         if (typeof window.Sortable === 'undefined') { console.warn('SortableJS not loaded'); return; }
         const cardsEls = document.querySelectorAll('#groupingBoard .grouping-cards');
         cardsEls.forEach((el) => {
+          const onChange = () => {
+            groupingState.dirty = true;
+            recalcCounts();
+            evaluateAndPaintViolations();
+          };
           const s = window.Sortable.create(el, {
             group: 'grouping',
             animation: 150,
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
-            onEnd: () => {
-              groupingState.dirty = true;
-              recalcCounts();
-              evaluateAndPaintViolations();
-            },
+            onEnd: onChange,
+            onAdd: onChange,
+            onUpdate: onChange,
+            onSort: onChange,
           });
           groupingState.sortables.push(s);
         });
@@ -1971,6 +1977,12 @@
         const view = groupingState.view;
         for (const g of (view.groups || [])) { const m = g.members.find((x) => x.user_id === userId); if (m) return m.name; }
         const p = view.pool.find((x) => x.user_id === userId); if (p) return p.name;
+        // 制約 API のレスポンスに付いている user_a_name / user_b_name にフォールバック
+        // （現参加者でないユーザー（過去参加・退会など）を制約に含めている場合の救済）
+        for (const c of (groupingState.constraints || [])) {
+          if (c.user_id_a === userId && c.user_a_name) return c.user_a_name;
+          if (c.user_id_b === userId && c.user_b_name) return c.user_b_name;
+        }
         return userId;
       }
       function renderViolationAlerts(required, preferred) {
@@ -2024,6 +2036,16 @@
         </div>`;
       }
       // ペア制約パネル内のボタンをバインド（renderConstraintsPanel 後）
+      // 制約パネルだけ in-place で再描画する。reloadGroupingView は DOM 全消し＝未保存配置を壊すので呼ばない。
+      async function refreshConstraintsOnly() {
+        try {
+          groupingState.constraints = await api('/notifications/' + groupingState.notifUuid + '/constraints');
+        } catch (_) { groupingState.constraints = []; }
+        const panel = document.querySelector('#groupingBox .grouping-constraints-panel');
+        if (panel) panel.outerHTML = renderConstraintsPanel();
+        wireConstraintsPanel();
+        evaluateAndPaintViolations();
+      }
       function wireConstraintsPanel() {
         const add = $('#cAdd'); if (!add) return;
         add.onclick = async () => {
@@ -2033,8 +2055,7 @@
           try {
             await api('/notifications/' + groupingState.notifUuid + '/constraints',
               { method: 'POST', body: JSON.stringify({ user_id_a: a, user_id_b: b, direction, strength }) });
-            await reloadGroupingView();
-            wireConstraintsPanel();
+            await refreshConstraintsOnly();
           } catch (e) { toast(e.message, true); }
         };
         document.querySelectorAll('[data-del-constraint]').forEach((b) => {
@@ -2042,8 +2063,7 @@
             const cuuid = b.dataset.delConstraint;
             try {
               await api('/notifications/' + groupingState.notifUuid + '/constraints/' + cuuid, { method: 'DELETE' });
-              await reloadGroupingView();
-              wireConstraintsPanel();
+              await refreshConstraintsOnly();
             } catch (e) { toast(e.message, true); }
           };
         });
@@ -2056,12 +2076,17 @@
         wireConstraintsPanel();
       };
       async function saveGroupingMembers(silent) {
+        // 未初期化(view.grouping 無し)なら、グループ枠だけ作って終了。
+        // この時点では DOM にグループ列が無い＝D&D 不能なので、メンバー一括保存は走らせない。
+        // （旧実装は reload で DOM を全消ししてから空 assignments を送り、保存済み配置を消していた）
         if (!groupingState.view || !groupingState.view.grouping) {
           const gc = Number($('#groupingCount').value);
           if (!Number.isInteger(gc) || gc < 1) { toast('グループ数を指定してください', true); return; }
           await api('/occurrences/' + groupingState.occUuid + '/grouping',
             { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
           await reloadGroupingView();
+          if (!silent) toast('グループ枠を作成しました');
+          return;
         }
         const { assignments, groupOf } = collectCurrentAssignments();
         const requiredViolations = groupingState.constraints.filter((c) => {
