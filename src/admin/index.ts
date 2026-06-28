@@ -688,19 +688,14 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const view = await getGroupingView(db, occ.id);
       if (!view.grouping) return json({ error: 'grouping not initialized' }, 400);
       const constraints = await listConstraints(db, occ.notification_id);
-      const participantIds = [
-        ...view.pool.map((p) => p.user_id),
-        ...view.groups.flatMap((g) =>
-          g.members
-            .filter(
-              (m) =>
-                !view.diff.no_longer_participating.some(
-                  (x) => x.user_id === m.user_id && x.group_id === g.id,
-                ),
-            )
-            .map((m) => m.user_id),
-        ),
-      ];
+      // 未配置メンバーのみを自動配置対象とする
+      const participantIds = view.pool.map((m) => m.user_id);
+      await setGroupMembers(
+        db,
+        view.grouping.id,
+        assignments,
+        true,
+      );
       const groupIds = view.groups.map((g) => g.id);
       const result = autoAssign(participantIds, groupIds, constraints);
       const assignments = Array.from(result.byGroupId.entries()).map(([group_id, user_ids]) => ({
