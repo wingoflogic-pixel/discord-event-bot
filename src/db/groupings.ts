@@ -301,6 +301,7 @@ export async function getGroupingView(
         }>();
       return {
         id: g.id,
+        uuid: g.uuid,
         group_index: g.group_index,
         name: g.name,
         members: members.map((mm) => {

@@ -289,6 +289,8 @@ export interface GroupingConstraint {
 /** API 応答用: Group + メンバー一覧（表示名付き） */
 export interface GroupWithMembers {
   id: number;
+  /** URL／API 表面用の UUID（ADR 0016）。クライアントの DOM data 属性キー・rename/move 等の参照キーに使う */
+  uuid: string;
   group_index: number;
   name: string;
   members: { user_id: string; name: string }[];
