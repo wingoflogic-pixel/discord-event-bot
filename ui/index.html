@@ -1698,7 +1698,7 @@
           <p class="muted" style="font-size:12px;margin-top:8px">実行すると既存の番号は破棄され、参加者全員に 1..N で振り直します（ADR 0018）。</p>
           <div class="actions" style="margin-top:10px">
             <button class="btn" id="runAssignFirstCome" data-occ="${esc(occUuid)}">早い順で割り当て</button>
-            <button class="btn secondary" id="runAssignRandom" data-occ="${esc(occUuid)}">ランダムで割り当て</button>
+            <button class="btn" id="runAssignRandom" data-occ="${esc(occUuid)}">ランダムで割り当て</button>
           </div>`;
         const run = async (mode, label) => {
           if (!(await confirmDialog(`この開催日で番号割り当てを実行します（${label}）。既存の番号は破棄され、新しく振り直されます。`, { okLabel: '実行する' }))) return;
