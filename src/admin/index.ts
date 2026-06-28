@@ -557,6 +557,26 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       if (!occ) return json({ error: 'Not found' }, 404);
       return json(await getAssignments(db, occ.id));
     }
+    // /occurrences/:uuid/assignments/announce  POST  現在の番号割り当てをチャンネルへ投稿
+    const occAssignmentsAnnounce = path.match(
+      new RegExp(`^/occurrences/(${UUID_RE})/assignments/announce$`),
+    );
+    if (occAssignmentsAnnounce && method === 'POST') {
+      const occ = await getOccurrenceByUuid(db, occAssignmentsAnnounce[1]);
+      if (!occ) return json({ error: 'occurrence not found' }, 404);
+      const n = await getNotification(db, occ.notification_id);
+      if (!n) return json({ error: 'notification not found' }, 404);
+      const list = await getAssignments(db, occ.id);
+      if (list.length === 0) return json({ error: 'no assignments to announce' }, 400);
+      const lines: string[] = [];
+      lines.push(
+        `🔢 **番号割り当て** ${occ.occurrence_date} ${formatTimeRange(occ.start_time || n.start_time, n.duration_minutes)}`,
+      );
+      lines.push('');
+      for (const a of list) lines.push(`#${a.number} ${a.name}`);
+      const announced = await sendChannelMessage(env, n.channel_id, lines.join('\n'));
+      return json({ ok: announced, content: lines.join('\n') });
+    }
     // /occurrences/:uuid ({status|date})
     const occId = path.match(new RegExp(`^/occurrences/(${UUID_RE})$`));
     if (occId && method === 'PUT') {

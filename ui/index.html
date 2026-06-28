@@ -625,6 +625,7 @@
             <div class="modal-body" id="assignmentBox"></div>
             <div class="modal-foot">
               <button type="button" class="btn ghost" id="assignmentCancel">閉じる</button>
+              <button type="button" class="btn secondary" id="assignmentAnnounce">📣 結果をチャンネルへ投稿</button>
             </div>
           </dialog>
           <dialog class="modal-lg as-page" id="groupingDialog" aria-labelledby="groupingTitle">
@@ -1746,6 +1747,13 @@
         $('#assignmentClose').onclick = $('#assignmentCancel').onclick = closeBack;
         const cb = $('#assignmentCrumbBack');
         if (cb) cb.onclick = (e) => { e.preventDefault(); closeBack(); };
+        $('#assignmentAnnounce').onclick = (e) => withBusy(e.currentTarget, async () => {
+          if (!(await confirmDialog('現在の番号割り当てをチャンネルへ投稿します。', { okLabel: '投稿する' }))) return;
+          try {
+            const r = await api('/occurrences/' + occUuid + '/assignments/announce', { method: 'POST' });
+            toast(r && r.ok ? '投稿しました' : '投稿に失敗しました', !(r && r.ok));
+          } catch (e) { toast(e.message, true); }
+        });
         try { await loadAssignments(occUuid); } catch (e) { toast(e.message, true); }
       }
 
