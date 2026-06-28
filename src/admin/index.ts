@@ -690,19 +690,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const constraints = await listConstraints(db, occ.notification_id);
       // 未配置メンバーのみを自動配置対象とする
       const participantIds = view.pool.map((m) => m.user_id);
-      await setGroupMembers(
-        db,
-        view.grouping.id,
-        assignments,
-        true,
-      );
       const groupIds = view.groups.map((g) => g.id);
       const result = autoAssign(participantIds, groupIds, constraints);
       const assignments = Array.from(result.byGroupId.entries()).map(([group_id, user_ids]) => ({
         group_id,
         user_ids,
       }));
-      await setGroupMembers(db, view.grouping.id, assignments);
+      await setGroupMembers(db, view.grouping.id, assignments, true);
       return json(await getGroupingView(db, occ.id));
     }
     // /occurrences/:uuid/grouping/announce  POST
