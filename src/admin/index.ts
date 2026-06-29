@@ -714,8 +714,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       );
       lines.push('');
       for (const g of view.groups) {
-        const names = g.members.map((m) => m.name).join('\n');
-        lines.push(`**${g.name}** (${g.members.length}名):\n${names || '—'}`);
+        const names = g.members.map((m) => `　${m.name}`).join('\n');
+        //lines.push(`**${g.name}** (${g.members.length}名):\n　${names || '—'}`);
+
+        lines.push(`**${g.name}** (${g.members.length}名):`);
+        lines.push(names || '　—');
+        lines.push(''); // ← グループ間に空行を追加
       }
       if (view.pool.length > 0) {
         lines.push('');
