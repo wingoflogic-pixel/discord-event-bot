@@ -714,12 +714,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       );
       lines.push('');
       for (const g of view.groups) {
-        const names = g.members.map((m) => m.name).join(', ');
-        lines.push(`**${g.name}** (${g.members.length}名): ${names || '—'}`);
+        const names = g.members.map((m) => m.name).join('\n');
+        lines.push(`**${g.name}** (${g.members.length}名):\n${names || '—'}`);
       }
       if (view.pool.length > 0) {
         lines.push('');
-        lines.push(`未割り当て (${view.pool.length}名): ${view.pool.map((m) => m.name).join(', ')}`);
+        lines.push(`未割り当て (${view.pool.length}名):\n${view.pool.map((m) => m.name).join('\n')}`);
       }
       const announced = await sendChannelMessage(env, n.channel_id, lines.join('\n'));
       return json({ ok: announced, content: lines.join('\n') });
