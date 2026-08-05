@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { api, type Guild } from '../api';
-import { withBusy } from '../lib/dialog';
+import { confirmDialog, withBusy } from '../lib/dialog';
 import type { ToastFn } from '../App';
 
 type SetupStatus = {
@@ -16,7 +16,7 @@ const SECRET_ROWS: [string, string][] = [
   ['ADMIN_TOKEN', 'この管理画面のパスワード（自分で決めた文字列）'],
 ];
 
-export function Setup({ guild, toast }: { guild: Guild; toast: ToastFn }) {
+export function Setup({ guild, toast, onLeft }: { guild: Guild; toast: ToastFn; onLeft: () => void }) {
   const [st, setSt] = useState<SetupStatus | null>(null);
   const [registerResult, setRegisterResult] = useState('');
 
@@ -57,13 +57,34 @@ export function Setup({ guild, toast }: { guild: Guild; toast: ToastFn }) {
     });
   };
 
+  const leave = async (btn: HTMLElement | null) => {
+    const ok = await confirmDialog(
+      `Bot を「${guild.name || guild.id}」から退出させます。\n\n` +
+        'このサーバーのスケジュールはすべて停止し、サーバー一覧から消えます。\n' +
+        'データ（区分・スケジュール設定・回答履歴）は残るため、再招待すれば元に戻せます。',
+      { title: 'サーバーから退出', okLabel: '退出する', danger: true },
+    );
+    if (!ok) return;
+    await withBusy(btn, async () => {
+      try {
+        const r = await api('/guilds/' + guild.id + '/leave', { method: 'POST' });
+        toast(`退出しました（スケジュール ${r?.deactivated ?? 0} 件を停止）`);
+        onLeft();
+      } catch (e) {
+        toast(e instanceof Error ? e.message : String(e), true);
+      }
+    });
+  };
+
   return (
     <>
-      <h2>⚙️ セットアップ</h2>
-      <p className="muted">初期設定をここで完了できます。上から順に進めてください。</p>
+      <h2>⚙️ Bot 設定</h2>
+      <p className="muted">
+        初期設定は 1〜4 を上から順に進めてください。設定後は Bot の参加状態をここで管理できます。
+      </p>
 
       <fieldset>
-        <legend>1. シークレットの確認</legend>
+        <legend>1. シークレットを確認</legend>
         <p className="muted" style={{ fontSize: 13 }}>
           Cloudflare の管理画面（Settings → Variables and Secrets）で設定します。未設定があると Bot は動きません。
         </p>
@@ -72,7 +93,7 @@ export function Setup({ guild, toast }: { guild: Guild; toast: ToastFn }) {
           return (
             <div className="pickrow" key={key}>
               <div>
-                {ok ? '✅' : '⚠️'} <b>{key}</b>
+                <b>{key}</b>
                 <br />
                 <span className="muted" style={{ fontSize: 12 }}>
                   {label}
@@ -105,7 +126,7 @@ export function Setup({ guild, toast }: { guild: Guild; toast: ToastFn }) {
       </fieldset>
 
       <fieldset>
-        <legend>3. Interaction Endpoint URL を Discord に設定</legend>
+        <legend>3. Interactions Endpoint URL を設定</legend>
         <p className="muted" style={{ fontSize: 13 }}>
           下の URL をコピーし、Discord Developer Portal → General Information の「Interactions Endpoint URL」に貼り付けて保存してください。
         </p>
@@ -121,10 +142,26 @@ export function Setup({ guild, toast }: { guild: Guild; toast: ToastFn }) {
       </fieldset>
 
       <fieldset>
-        <legend>4. 中身を設定する</legend>
+        <legend>4. 区分とスケジュールを作成</legend>
         <p className="muted" style={{ fontSize: 13 }}>
-          左メニューの「メンバー区分」→「通知」の順に作成し、メンバーを登録すれば完了です。
+          左メニューの「メンバー区分」で区分を作成してメンバーを登録し、「スケジュール設定」でスケジュールを作成すれば完了です。
         </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>このサーバーの管理をやめる</legend>
+        <p className="muted" style={{ fontSize: 13 }}>
+          Bot が <b>{guild.name || guild.id}</b> から退出し、サーバー一覧から消えます。
+          退出前にこのサーバーのスケジュールをすべて停止するので、以降の募集・リマインドは送られません。
+          <br />
+          区分・スケジュール設定・回答履歴は<b>消えません</b>。もう一度 Bot を招待すればそのまま表示され、
+          必要なスケジュールを「スケジュール設定」で再開できます。
+        </p>
+        <div className="actions">
+          <button className="btn danger" onClick={(e) => leave(e.currentTarget)}>
+            Bot をこのサーバーから退出させる
+          </button>
+        </div>
       </fieldset>
     </>
   );

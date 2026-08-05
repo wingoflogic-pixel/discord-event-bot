@@ -65,6 +65,23 @@ export async function listActiveNotifications(db: D1Database): Promise<Notificat
   return results;
 }
 
+/**
+ * Server(guild_id) 配下の Notification をすべて無効化する（論理削除）。
+ * cron は active=1 しか処理しないため、これでそのサーバーへの送信・ロール同期が止まる。
+ * データ（区分・回答履歴など）は保持され、再招待すればそのまま参照できる。
+ * @returns 無効化した件数
+ */
+export async function deactivateNotificationsForGuild(
+  db: D1Database,
+  guildId: string,
+): Promise<number> {
+  const res = await db
+    .prepare('UPDATE notifications SET active = 0 WHERE guild_id = ? AND active = 1')
+    .bind(guildId)
+    .run();
+  return (res.meta.changes as number) ?? 0;
+}
+
 /** 単一 Notification 取得（未登録なら null） */
 export async function getNotification(
   db: D1Database,
@@ -296,6 +313,14 @@ export async function deleteNotification(db: D1Database, id: number): Promise<bo
   await db
     .prepare(
       `DELETE FROM responses WHERE occurrence_id IN (
+         SELECT id FROM occurrences WHERE notification_id = ?
+       )`,
+    )
+    .bind(id)
+    .run();
+  await db
+    .prepare(
+      `DELETE FROM response_log WHERE occurrence_id IN (
          SELECT id FROM occurrences WHERE notification_id = ?
        )`,
     )
