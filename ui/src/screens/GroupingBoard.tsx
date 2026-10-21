@@ -4,6 +4,7 @@
 // 旧 vanilla 実装の render/wire 関数群をほぼそのまま 1つの imperative コントローラに移植する。
 import { createSortableGroup } from '../lib/sortable';
 import { esc } from '../lib/esc';
+import { cutText } from '../../../src/lib/text';
 
 export type GroupMember = { user_id: string; name: string; label?: string | null };
 export type Group = { id: number; uuid: string; name: string; start_no?: number | null; members: GroupMember[]; group_index: number };
@@ -13,7 +14,7 @@ export type GroupingView = {
   pool: GroupMember[];
   diff: { no_longer_participating: { user_id: string; group_id: number }[] };
   /** どの開催回の配置か見出しに出すための表示情報（API が同送・M4） */
-  occurrence?: { occurrence_date: string; start_time: string | null };
+  occurrence?: { occurrence_date: string; start_time: string | null; duration_minutes?: number | null };
   notification?: { name: string; start_time: string | null; duration_minutes: number | null } | null;
 };
 export type Constraint = {
@@ -242,7 +243,7 @@ export function mountBoard(
       no.contentEditable = 'false';
       no.onkeydown = null;
       no.onblur = null;
-      const v = cancelled ? prev : stripLabelSep(no.textContent?.trim() || '').slice(0, 20);
+      const v = cancelled ? prev : cutText(stripLabelSep(no.textContent?.trim() || ''), 20);
       if (v) card.dataset.label = v;
       else delete card.dataset.label;
       if (v !== prev) opts.onDirty();

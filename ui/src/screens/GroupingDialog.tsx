@@ -8,6 +8,7 @@ import { showPreview } from '../lib/preview';
 import { occurrenceLabel } from '../lib/rrule';
 import { mountBoard, type BoardHandle, type Constraint, type GroupingView } from './GroupingBoard';
 import type { ToastFn } from '../App';
+import { cutText } from '../../../src/lib/text';
 
 export function GroupingDialog({
   guild,
@@ -17,6 +18,7 @@ export function GroupingDialog({
   onDirtyChange,
   onClose,
   onNavigateConstraints,
+  oneOff,
 }: {
   guild: Guild;
   nuuid: string;
@@ -25,6 +27,8 @@ export function GroupingDialog({
   onDirtyChange: (dirty: boolean) => void;
   onClose: () => void;
   onNavigateConstraints: () => void;
+  /** 単発出欠確認（テンプレート一覧が無いので「テンプレート」と呼ばない・P2-15） */
+  oneOff?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<BoardHandle | null>(null);
@@ -61,7 +65,7 @@ export function GroupingDialog({
         occurrenceLabel(
           view.occurrence.occurrence_date,
           view.occurrence.start_time || view.notification?.start_time,
-          view.notification?.duration_minutes,
+          view.occurrence.duration_minutes ?? view.notification?.duration_minutes,
         ),
       );
     }
@@ -111,7 +115,7 @@ export function GroupingDialog({
       const target = ev.target as HTMLElement;
       if (!target.matches?.('.grouping-col-head .name[data-group-uuid]')) return;
       target.contentEditable = 'false';
-      const newName = (target.textContent || '').trim().slice(0, 50);
+      const newName = cutText((target.textContent || '').trim(), 50);
       if (!newName) {
         target.textContent = '（名無し）';
         return;
@@ -149,7 +153,7 @@ export function GroupingDialog({
           if (dirtyRef.current) {
             const ok = await confirmDialog('未保存の配置変更があります。保存してからグループ数を変更しますか？', { okLabel: '保存して変更' });
             if (!ok) return;
-            await saveMembers(true);
+            if (!(await saveMembers(true))) return;
           }
           const cur = viewRef.current.grouping.group_count;
           if (gc < cur) {
@@ -198,18 +202,24 @@ export function GroupingDialog({
     boardRef.current?.clearBoard();
   };
 
-  async function saveMembers(silent?: boolean) {
+  /** 保存本体。キャンセル・失敗は false を返し、呼び出し元（グループ数変更・投稿）はそこで止まる（未保存の配置を失わない） */
+  async function saveMembers(silent?: boolean): Promise<boolean> {
     if (!viewRef.current?.grouping) {
       const input = containerRef.current?.querySelector<HTMLInputElement>('#groupingCount');
       const gc = Number(input?.value);
       if (!Number.isInteger(gc) || gc < 1) {
         toast('グループ数を指定してください', true);
-        return;
+        return false;
       }
-      await api(`/occurrences/${ouuid}/grouping`, { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
-      await reloadView();
-      if (!silent) toast('グループ枠を作成しました');
-      return;
+      try {
+        await api(`/occurrences/${ouuid}/grouping`, { method: 'PUT', body: JSON.stringify({ group_count: gc }) });
+        await reloadView();
+        if (!silent) toast('グループ枠を作成しました');
+        return true;
+      } catch (e) {
+        toast(e instanceof Error ? e.message : String(e), true);
+        return false;
+      }
     }
     const { assignments, groupOf } = boardRef.current!.collectCurrentAssignments();
     const requiredViolations = constraintsRef.current.filter((c) => {
@@ -221,14 +231,16 @@ export function GroupingDialog({
     });
     if (requiredViolations.length > 0) {
       const ok = await confirmDialog(`必須制約に ${requiredViolations.length} 件の違反があります。このまま保存しますか？`, { okLabel: '保存する', danger: true });
-      if (!ok) return;
+      if (!ok) return false;
     }
     try {
       await api(`/occurrences/${ouuid}/grouping/members`, { method: 'PUT', body: JSON.stringify({ assignments }) });
       if (!silent) toast('保存しました');
       await reloadView();
+      return true;
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), true);
+      return false;
     }
   }
 
@@ -244,7 +256,7 @@ export function GroupingDialog({
       if (dirtyRef.current) {
         const ok = await confirmDialog('未保存の変更があります。保存してから投稿しますか？', { okLabel: '保存して投稿' });
         if (!ok) return;
-        await saveMembers(true);
+        if (!(await saveMembers(true))) return;
       }
       const gone = viewRef.current?.diff.no_longer_participating || [];
       let n: any = null;
@@ -259,15 +271,15 @@ export function GroupingDialog({
         const c = channels.find((x) => x.id === id);
         return c ? '#' + c.name : id;
       };
-      const dest = n ? chName(n.grouping_channel_id || n.channel_id) : 'スケジュールの設定チャンネル';
+      const dest = n ? chName(n.grouping_channel_id || n.channel_id) : 'テンプレートの設定チャンネル';
       const msg =
-        (gone.length ? `⚠️ 不参加に変更されたメンバーが配置に残っています（${gone.map((x: any) => x.name).join('、')}）。このまま` : '') +
+        (gone.length ? `⚠️ 参加ではなくなったメンバー（不参加・休止中など）が配置に残っています（${gone.map((x: any) => x.name).join('、')}）。このまま` : '') +
         `現在のメンバー配置を ${dest} へ投稿します。（投稿先は「メンバー配置設定」で変更できます）`;
       const ok = await confirmDialog(msg, { okLabel: '投稿する', danger: gone.length > 0 });
       if (!ok) return;
       try {
         const r = await api(`/occurrences/${ouuid}/grouping/announce`, { method: 'POST' });
-        toast(r && r.ok ? '投稿しました' : '投稿に失敗しました', !(r && r.ok));
+        toast(r && r.ok ? '投稿しました' : `投稿に失敗しました${r?.progress ? `。${r.progress}` : ''}`, !(r && r.ok));
       } catch (e) {
         toast(e instanceof Error ? e.message : String(e), true);
       }
@@ -297,7 +309,7 @@ export function GroupingDialog({
                 attemptClose();
               }}
             >
-              開催回
+              出欠一覧
             </a>{' '}
             <span>›</span> <span>メンバー配置</span>
           </div>
@@ -318,9 +330,9 @@ export function GroupingDialog({
         {loading && <p className="muted">読み込み中…</p>}
         <div ref={containerRef} style={{ display: loading ? 'none' : 'block' }} />
         <p className="muted" style={{ fontSize: 12.5, marginTop: 14 }}>
-          🔗 ペア制約（{constraintsRef.current.length}件）と配置結果の投稿先はスケジュール単位の設定です。編集は{' '}
+          🔗 ペア制約（{constraintsRef.current.length}件）と配置結果の投稿先は{oneOff ? 'この出欠確認' : 'テンプレート単位'}の設定です。編集は{' '}
           <a href="#" onClick={editConstraints}>
-            スケジュール設定 › メンバー配置設定
+            {oneOff ? 'メンバー配置設定' : 'テンプレート › メンバー配置設定'}
           </a>{' '}
           から。制約違反があると盤面上に警告表示されます。
         </p>
@@ -336,7 +348,7 @@ export function GroupingDialog({
         <button type="button" className="btn secondary" onClick={(e) => announce(e.currentTarget)}>
           📣 配置をチャンネルへ投稿
         </button>
-        <button type="button" className="btn" onClick={(e) => saveMembers()}>
+        <button type="button" className="btn" onClick={(e) => withBusy(e.currentTarget, () => saveMembers())}>
           {hasGrouping ? '保存' : 'グループ枠を作成'}
         </button>
       </div>
